@@ -44,7 +44,6 @@ let pinyinLoader = null;
 let jszipLoader = null;
 let selectMode = false;
 let selected = new Set();
-let lastPickIdx = -1;
 let crop = null;
 
 // ---------- 小工具 ----------
@@ -64,21 +63,8 @@ function showToast(msg, type = 'ok') {
   showToast._t = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-// ratio: 0~1 显示确定进度；传 null 显示来回滑动的不确定进度
-function showLoading(text = '处理中…', ratio = null) {
+function showLoading(text = '处理中…') {
   $('loadingText').textContent = text;
-  const bar = $('loadingBar');
-  const pct = $('loadingPct');
-  if (ratio == null) {
-    bar.style.width = '';
-    bar.classList.add('indet');
-    pct.textContent = '';
-  } else {
-    const p = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
-    bar.classList.remove('indet');
-    bar.style.width = `${p}%`;
-    pct.textContent = `${p}%`;
-  }
   $('loading').classList.add('show');
 }
 function hideLoading() { $('loading').classList.remove('show'); }
@@ -161,7 +147,7 @@ function applyTheme(t = readTheme()) {
     b.setAttribute('aria-checked', String(b.dataset.theme === t));
   });
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', t === 'dark' ? '#0d0f13' : '#f4f5f7');
+  if (meta) meta.setAttribute('content', t === 'dark' ? '#0e1014' : '#f5f6f8');
 }
 
 function setTheme(t) {
@@ -180,22 +166,16 @@ function toggleThemeMenu(force) {
 function closeThemeMenu() { toggleThemeMenu(false); }
 
 // ---------- 页面背景 ----------
-const BG_DEFAULT = { url: '', dim: 60, veil: 'dark', blur: 0 };
-
 function readBg() {
-  try { return { ...BG_DEFAULT, ...(JSON.parse(localStorage.getItem(BG_KEY)) || {}) }; }
-  catch { return { ...BG_DEFAULT }; }
+  try { return JSON.parse(localStorage.getItem(BG_KEY)) || { url: '', dim: 60 }; }
+  catch { return { url: '', dim: 60 }; }
 }
 
 function applyBg(bg = readBg()) {
   const url = String((bg && bg.url) || '').trim();
   const dim = Math.min(90, Math.max(0, Number(bg && bg.dim) || 0));
-  const veil = bg && bg.veil === 'light' ? 'light' : 'dark';
-  const blur = Math.min(20, Math.max(0, Number(bg && bg.blur) || 0));
   $('bgLayer').style.backgroundImage = url ? `url("${url.replace(/["'\\]/g, '')}")` : 'none';
   $('bgDim').style.opacity = url ? String(dim / 100) : '1';
-  document.documentElement.style.setProperty('--bg-veil', veil === 'dark' ? '#101319' : '');
-  $('bgLayer').style.filter = url && blur ? `blur(${blur}px)` : '';
   document.body.classList.toggle('has-bg', !!url);
 }
 
@@ -516,8 +496,6 @@ function iconsetUrl() {
 function renderSub() {
   const ready = isConfigReady();
   $('subCount').textContent = `${icons.length} 个图标`;
-  const stat = $('statCount');
-  if (stat) stat.textContent = String(icons.length);
   $('subUrl').value = ready ? iconsetUrl() : '';
   $('copySubBtn').disabled = !ready;
   document.querySelectorAll('#cdnSeg .seg-btn').forEach((b) => {
@@ -586,7 +564,6 @@ function renderBulkBar() {
   $('bulkBar').hidden = !(selectMode || n > 0);
   $('bulkCount').textContent = `已选 ${n} 个`;
   $('bulkDownload').disabled = n === 0;
-  $('bulkDelete').disabled = n === 0;
   $('selectBtn').classList.toggle('on', selectMode);
 }
 
@@ -604,26 +581,8 @@ function pruneSelection() {
 
 function setSelectMode(on) {
   selectMode = on;
-  lastPickIdx = -1;
   if (!on) selected.clear();
   renderAll();
-  if (on) showToast('点卡片即可选中，按住 Shift 连选');
-}
-
-// 勾选 / 取消勾选；shift 按下时从上一次点击的位置连选
-function togglePick(icon, shift) {
-  const list = filteredIcons();
-  const idx = list.findIndex((i) => i.file === icon.file);
-  if (shift && lastPickIdx >= 0 && idx >= 0) {
-    const [s, e] = idx >= lastPickIdx ? [lastPickIdx, idx] : [idx, lastPickIdx];
-    for (let k = s; k <= e; k++) selected.add(list[k].file);
-  } else {
-    if (selected.has(icon.file)) selected.delete(icon.file);
-    else selected.add(icon.file);
-    lastPickIdx = idx;
-  }
-  if (selectMode) renderAll();
-  else setSelectMode(true);
 }
 
 // ---------- 复制 ----------
@@ -743,7 +702,6 @@ async function uploadFiles(fileList) {
       }
     }
     if (added.length) {
-      showLoading('写入索引…', 0.98);
       await commitIndex(async (list) => list.concat(added), `feat: add ${added.length} icon(s)`);
     }
     if (failed.length) showToast(`${added.length ? `✓ 已上传 ${added.length} 个，` : ''}${failed.length} 个失败`, failed.length && !added.length ? 'err' : 'ok');
@@ -810,7 +768,7 @@ async function downloadZip(list) {
   const zip = new JSZip();
   let ok = 0;
   for (let i = 0; i < list.length; i++) {
-    showLoading(`打包 ${i + 1}/${list.length}`, (i + 1) / (list.length + 1));
+    showLoading(`打包 ${i + 1}/${list.length}`);
     try {
       const res = await fetch(withCacheBust(iconUrl(list[i])));
       if (!res.ok) throw new Error(String(res.status));
@@ -818,10 +776,9 @@ async function downloadZip(list) {
       ok++;
     } catch { /* 跳过失败项 */ }
   }
-  showLoading('生成压缩包…', 0.97);
-  if (!ok) { hideLoading(); showToast('打包失败，图片全部无法下载', 'err'); return; }
-  const blob = await zip.generateAsync({ type: 'blob' });
   hideLoading();
+  if (!ok) { showToast('打包失败，图片全部无法下载', 'err'); return; }
+  const blob = await zip.generateAsync({ type: 'blob' });
   saveBlob(blob, `icons-${ok}.zip`);
   showToast(`✓ 已打包 ${ok} 个图标`);
 }
@@ -977,60 +934,6 @@ async function saveCrop() {
   }
 }
 
-// ---------- 批量删除 ----------
-function askDeleteSelected() {
-  const list = icons.filter((i) => selected.has(i.file));
-  if (!list.length) return;
-  $('confirmTitle').textContent = '批量删除图标';
-  $('confirmText').textContent =
-    `确定删除选中的 ${list.length} 个图标吗？仓库里的图片文件会一起删除，且无法撤销。`;
-  confirmHandler = () => deleteSelected(list);
-  openModal('confirmModal');
-}
-
-async function deleteSelected(list) {
-  closeModal('confirmModal');
-  showLoading(`删除 1/${list.length}`, 0.03);
-  const removed = new Set();
-  const failed = [];
-  try {
-    for (let i = 0; i < list.length; i++) {
-      showLoading(`删除 ${i + 1}/${list.length}`, (i + 1) / (list.length + 1));
-      const icon = list[i];
-      try {
-        const f = await getFile(`${config.dir}/${icon.file}`);
-        if (f) await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
-        removed.add(icon.file);
-      } catch {
-        failed.push(icon.name || icon.file);
-      }
-    }
-    // 索引只提交一次：删 N 个图标也只写一遍 icons.json
-    if (removed.size) {
-      showLoading('写入索引…', 0.98);
-      await commitIndex(
-        async (l) => l.filter((i) => !removed.has(i.file)),
-        `feat: remove ${removed.size} icon(s)`
-      );
-    }
-    selected.clear();
-    renderAll();
-    if (failed.length) {
-      showToast(
-        `${removed.size ? `✓ 已删除 ${removed.size} 个，` : ''}${failed.length} 个失败`,
-        removed.size ? 'ok' : 'err'
-      );
-    } else {
-      showToast(`✓ 已删除 ${removed.size} 个图标`);
-    }
-  } catch (e) {
-    showToast(ghMessage(e, '删除失败'), 'err');
-    renderAll();
-  } finally {
-    hideLoading();
-  }
-}
-
 // ---------- 删除 / 重命名 ----------
 function askDelete(icon) {
   $('confirmTitle').textContent = '删除图标';
@@ -1123,11 +1026,6 @@ function openSettings() {
   $('cfgBgUrl').value = bg.url || '';
   $('cfgBgDim').value = String(bg.dim ?? 60);
   $('cfgBgDimVal').textContent = `${bg.dim ?? 60}%`;
-  $('cfgBgBlur').value = String(bg.blur ?? 0);
-  $('cfgBgBlurVal').textContent = `${bg.blur ?? 0}px`;
-  const v = bg.veil === 'light' ? 'light' : 'dark';
-  document.querySelectorAll('#cfgBgVeil .seg-btn')
-    .forEach((b) => b.classList.toggle('on', b.dataset.veil === v));
 
   resetPwdToggles();
   openModal('settingsModal');
@@ -1135,12 +1033,9 @@ function openSettings() {
 }
 
 function readBgForm() {
-  const veilBtn = document.querySelector('#cfgBgVeil .seg-btn.on');
   return {
     url: $('cfgBgUrl').value.trim(),
-    dim: Number($('cfgBgDim').value) || 0,
-    veil: veilBtn ? veilBtn.dataset.veil : 'dark',
-    blur: Number($('cfgBgBlur').value) || 0
+    dim: Number($('cfgBgDim').value) || 0
   };
 }
 
@@ -1276,7 +1171,6 @@ function bindEvents() {
   });
   $('bulkNone').addEventListener('click', () => { selected.clear(); renderAll(); });
   $('bulkDownload').addEventListener('click', downloadSelected);
-  $('bulkDelete').addEventListener('click', askDeleteSelected);
 
   // 网格操作
   $('iconGrid').addEventListener('click', (e) => {
@@ -1287,8 +1181,12 @@ function bindEvents() {
     const act = e.target.closest('[data-act]');
     if (!act) return;
     const a = act.dataset.act;
-    if (a === 'pick') { togglePick(icon, e.shiftKey); return; }
-    if (a === 'preview') openPreview(icon);
+    if (a === 'pick') {
+      if (!selectMode) setSelectMode(true);
+      if (selected.has(icon.file)) selected.delete(icon.file);
+      else selected.add(icon.file);
+      renderAll();
+    } else if (a === 'preview') openPreview(icon);
     else if (a === 'crop') openCrop(icon);
     else if (a === 'rename') askRename(icon);
     else if (a === 'delete') askDelete(icon);
@@ -1318,23 +1216,13 @@ function bindEvents() {
     $('cfgBgDimVal').textContent = `${$('cfgBgDim').value}%`;
     bgLive();
   });
-  $('cfgBgBlur').addEventListener('input', () => {
-    $('cfgBgBlurVal').textContent = `${$('cfgBgBlur').value}px`;
-    bgLive();
-  });
-  $('cfgBgVeil').addEventListener('click', (e) => {
-    const btn = e.target.closest('.seg-btn');
-    if (!btn) return;
-    document.querySelectorAll('#cfgBgVeil .seg-btn').forEach((x) => x.classList.toggle('on', x === btn));
-    bgLive();
-  });
   $('bgApplyBtn').addEventListener('click', () => {
     saveBg(readBgForm());
     showToast('✓ 背景已应用');
   });
   $('bgClearBtn').addEventListener('click', () => {
     $('cfgBgUrl').value = '';
-    saveBg({ ...readBgForm(), url: '' });
+    saveBg({ url: '', dim: 60 });
     showToast('✓ 已清除背景');
   });
 
@@ -1397,12 +1285,6 @@ function bindEvents() {
     applyCrop();
   });
 
-  // 网格密度
-  $('densitySeg').addEventListener('click', (e) => {
-    const b = e.target.closest('.seg-btn');
-    if (b) setDensity(b.dataset.density);
-  });
-
   // 通用：关闭按钮 / 点遮罩关闭 / Esc
   document.querySelectorAll('[data-close]').forEach((el) =>
     el.addEventListener('click', () => closeModal(el.closest('.modal').id))
@@ -1423,47 +1305,11 @@ function bindEvents() {
   );
 }
 
-// ---------- 网格密度（大 / 中 / 小） ----------
-const DENSITY_KEY = 'icon_density';
-
-function setDensity(d) {
-  const v = ['l', 'm', 's'].includes(d) ? d : 'm';
-  $('iconGrid').dataset.density = v;
-  document.querySelectorAll('#densitySeg .seg-btn')
-    .forEach((b) => b.classList.toggle('on', b.dataset.density === v));
-  try { localStorage.setItem(DENSITY_KEY, v); } catch { /* ignore */ }
-}
-
-function readDensity() {
-  try { return localStorage.getItem(DENSITY_KEY) || 'm'; } catch { return 'm'; }
-}
-
-// ---------- 侧边导航 ----------
-function initNav() {
-  document.querySelectorAll('.nav-item').forEach((btn) => {
-    btn.addEventListener('click', () => {
-      const nav = btn.dataset.nav;
-      if (nav === 'set') return; // 设置项沿用 settingsBtn 自己的逻辑
-      document.querySelectorAll('.nav-item')
-        .forEach((x) => x.classList.toggle('on', x === btn));
-      if (nav === 'sub') {
-        $('pageTitle').textContent = '订阅地址';
-        $('subCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
-      } else {
-        $('pageTitle').textContent = '图标库';
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    });
-  });
-}
-
 // ---------- 初始化 ----------
 function init() {
   applyTheme();
   applyBg();
-  setDensity(readDensity());
   bindEvents();
-  initNav();
   updateRepoLink();
   renderAll();
   if (isConfigReady()) loadIcons();

@@ -10,8 +10,7 @@
 <meta property="og:description" content="自建 Emby 图标库，上传即用，输出标准 JSON 订阅地址。">
 <meta property="og:type" content="website">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3Ctext x='32' y='45' font-size='38' font-family='Helvetica,Arial,sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EI%3C/text%3E%3C/svg%3E">
-<!-- 资源带版本号：改了 css/js 记得 +1，避免用户浏览器拿到新版 HTML 配旧版脚本 -->
-<link rel="stylesheet" href="assets/style.css?v=6">
+<link rel="stylesheet" href="assets/style.css?v=7">
 </head>
 <body>
 
@@ -59,7 +58,6 @@
   <symbol id="i-close" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
   <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2.5"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
-  <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5"/></symbol>
   <symbol id="i-github" viewBox="0 0 24 24">
     <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3.1-.4 6.4-1.5 6.4-7a5.4 5.4 0 0 0-1.5-3.8 5.1 5.1 0 0 0-.1-3.8s-1.2-.4-4 1.5a13.4 13.4 0 0 0-7 0C6.3.6 5.1 1 5.1 1a5.1 5.1 0 0 0-.1 3.8A5.4 5.4 0 0 0 3.5 8.6c0 5.4 3.3 6.6 6.4 7a3.4 3.4 0 0 0-.9 2.6V22"/>
   </symbol>
@@ -69,169 +67,125 @@
 <!-- 页面背景层（可在设置里填图片 URL） -->
 <div class="bg-layer" id="bgLayer" aria-hidden="true"><div class="bg-dim" id="bgDim"></div></div>
 
-<div class="app">
-
-  <!-- ============ 侧边栏 ============ -->
-  <aside class="sidebar">
-    <div class="side-brand">
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
       <span class="mark">I</span>
-      <span class="side-brand-text">
+      <span class="brand-text">
         <strong>Icon</strong>
         <small>Emby 图标库</small>
       </span>
     </div>
-
-    <nav class="side-nav" aria-label="主导航">
-      <button type="button" class="nav-item on" data-nav="lib">
-        <svg class="ico"><use href="#i-grid"/></svg><span>图标库</span>
-      </button>
-      <button type="button" class="nav-item" data-nav="sub">
-        <svg class="ico"><use href="#i-link"/></svg><span>订阅地址</span>
-      </button>
-      <button type="button" class="nav-item" data-nav="set" id="settingsBtn">
-        <svg class="ico"><use href="#i-settings"/></svg><span>设置</span>
-      </button>
-    </nav>
-
-    <div class="side-foot">
-      <div class="side-stat">
-        <div class="stat-row"><span>仓库</span><b id="repoLabel">Wliky/Icon</b></div>
-        <div class="stat-row"><span>图标</span><b id="statCount">0</b></div>
-      </div>
-      <a id="ghBtn" class="side-link" href="https://github.com/Wliky/Icon" target="_blank" rel="noopener" title="打开 GitHub 仓库">
-        <svg class="ico fill"><use href="#i-github"/></svg><span>在 GitHub 上查看</span>
+    <div class="topbar-actions">
+      <a id="ghBtn" class="icon-btn" href="https://github.com/Wliky/Icon" target="_blank" rel="noopener" title="打开 GitHub 仓库" aria-label="GitHub 仓库">
+        <svg class="ico fill"><use href="#i-github"/></svg>
       </a>
+
+      <div class="menu-wrap">
+        <button id="themeBtn" class="icon-btn" title="主题模式" aria-label="主题模式" aria-haspopup="true" aria-expanded="false">
+          <svg class="ico"><use href="#i-auto"/></svg>
+        </button>
+        <div class="menu" id="themeMenu" hidden role="menu">
+          <button type="button" role="menuitem" data-theme="system"><svg class="ico"><use href="#i-auto"/></svg><span>跟随系统</span><svg class="ico tick"><use href="#i-check"/></svg></button>
+          <button type="button" role="menuitem" data-theme="light"><svg class="ico"><use href="#i-sun"/></svg><span>浅色</span><svg class="ico tick"><use href="#i-check"/></svg></button>
+          <button type="button" role="menuitem" data-theme="dark"><svg class="ico"><use href="#i-moon"/></svg><span>深色</span><svg class="ico tick"><use href="#i-check"/></svg></button>
+        </div>
+      </div>
+
+      <button id="refreshBtn" class="icon-btn" title="刷新图标库" aria-label="刷新">
+        <svg class="ico" id="refreshIco"><use href="#i-refresh"/></svg>
+      </button>
+      <button id="settingsBtn" class="btn ghost">
+        <svg class="ico"><use href="#i-settings"/></svg>设置
+      </button>
     </div>
-  </aside>
-
-  <!-- ============ 主区 ============ -->
-  <div class="main">
-
-    <header class="topbar">
-      <div class="topbar-inner">
-        <h1 class="page-title" id="pageTitle">图标库</h1>
-
-        <div class="topbar-actions">
-          <div class="search">
-            <svg class="ico"><use href="#i-search"/></svg>
-            <input id="searchInput" type="search" placeholder="搜索图标名称…" aria-label="搜索图标">
-          </div>
-
-          <button id="refreshBtn" class="icon-btn" title="刷新图标库" aria-label="刷新">
-            <svg class="ico" id="refreshIco"><use href="#i-refresh"/></svg>
-          </button>
-
-          <div class="menu-wrap">
-            <button id="themeBtn" class="icon-btn" title="主题模式" aria-label="主题模式" aria-haspopup="true" aria-expanded="false">
-              <svg class="ico"><use href="#i-auto"/></svg>
-            </button>
-            <div class="menu" id="themeMenu" hidden role="menu">
-              <button type="button" role="menuitem" data-theme="system"><svg class="ico"><use href="#i-auto"/></svg><span>跟随系统</span><svg class="ico tick"><use href="#i-check"/></svg></button>
-              <button type="button" role="menuitem" data-theme="light"><svg class="ico"><use href="#i-sun"/></svg><span>浅色</span><svg class="ico tick"><use href="#i-check"/></svg></button>
-              <button type="button" role="menuitem" data-theme="dark"><svg class="ico"><use href="#i-moon"/></svg><span>深色</span><svg class="ico tick"><use href="#i-check"/></svg></button>
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </header>
-
-    <main class="content">
-
-      <!-- 订阅地址 -->
-      <section class="card sub-card" id="subCard">
-        <div class="sub-head">
-          <div>
-            <h2>订阅地址</h2>
-            <p>复制地址，粘贴到 Emby 客户端的「图标库 / 图标订阅」里，即可一次性加载全部图标。</p>
-          </div>
-          <span class="pill" id="subCount">0 个图标</span>
-        </div>
-
-        <div class="seg" id="cdnSeg">
-          <button type="button" class="seg-btn on" data-cdn="jsdelivr">jsDelivr · 国内推荐</button>
-          <button type="button" class="seg-btn" data-cdn="raw">GitHub Raw</button>
-        </div>
-
-        <div class="copy-row">
-          <input id="subUrl" readonly value="" spellcheck="false" aria-label="图标库订阅地址">
-          <button type="button" class="btn primary" id="copySubBtn">复制</button>
-        </div>
-
-        <p class="sub-note" id="subNote">完成 GitHub 配置后自动生成。</p>
-      </section>
-
-      <!-- 首次引导 -->
-      <section class="card guide" id="guide" hidden>
-        <h2>三步开始使用</h2>
-        <ol class="steps">
-          <li><b>生成 Token</b>：GitHub → Settings → Developer settings → Fine-grained token，只给这个仓库的 <code>Contents</code> 读写权限。</li>
-          <li><b>粘贴 Token</b>：点右上角「设置 → 保存并连接」，仓库信息会自动识别，你只需要填 Token。</li>
-          <li><b>拖图上传</b>：图片按原样保存，上传完订阅地址就能用了。</li>
-        </ol>
-        <button type="button" class="btn primary" id="guideSetupBtn">去填写 Token</button>
-      </section>
-
-      <!-- 工具条 -->
-      <section class="toolbar">
-        <button type="button" class="btn ghost" id="selectBtn" title="批量选择">
-          <svg class="ico"><use href="#i-check"/></svg>批量
-        </button>
-        <label class="btn primary" for="fileInput">
-          <svg class="ico"><use href="#i-plus"/></svg>上传图标
-        </label>
-        <input id="fileInput" type="file" accept="image/*" multiple hidden>
-
-        <span class="spacer"></span>
-
-        <span class="density" role="group" aria-label="网格密度">
-          <span class="lbl">密度</span>
-          <div class="seg" id="densitySeg">
-            <button type="button" class="seg-btn" data-density="l">大</button>
-            <button type="button" class="seg-btn on" data-density="m">中</button>
-            <button type="button" class="seg-btn" data-density="s">小</button>
-          </div>
-        </span>
-      </section>
-
-      <!-- 批量操作条 -->
-      <section class="bulkbar" id="bulkBar" hidden>
-        <span id="bulkCount">已选 0 个</span>
-        <button type="button" class="btn ghost" id="bulkAll">全选</button>
-        <button type="button" class="btn ghost" id="bulkNone">清空</button>
-        <span class="spacer"></span>
-        <button type="button" class="btn danger" id="bulkDelete" disabled>
-          <svg class="ico"><use href="#i-trash"/></svg>删除
-        </button>
-        <button type="button" class="btn primary" id="bulkDownload" disabled>
-          <svg class="ico"><use href="#i-download"/></svg>打包下载 ZIP
-        </button>
-      </section>
-
-      <!-- 拖拽区 -->
-      <div id="dropzone" class="dropzone">
-        <div class="dropzone-inner">
-          <strong>把图片拖到这里</strong>
-          <span>PNG / JPG / WEBP / GIF，可一次拖多张；原样保存，需要裁剪可上传后单独编辑</span>
-        </div>
-      </div>
-
-      <!-- 图标网格 -->
-      <section id="iconGrid" class="grid" aria-live="polite"></section>
-
-      <p id="empty" class="state" hidden>图标库还是空的。拖图片到上面，或点「上传图标」添加第一个。</p>
-      <p id="noResult" class="state" hidden>没有匹配「<b id="noResultKey"></b>」的图标。</p>
-      <button id="loadMore" class="btn ghost block" hidden>显示更多</button>
-
-      <footer class="site-foot">
-        <span>Icon · 自建 Emby 图标库</span>
-        <a id="repoLink" href="https://github.com/Wliky/Icon" target="_blank" rel="noopener">
-          <svg class="ico fill"><use href="#i-github"/></svg><span>Wliky/Icon</span>
-        </a>
-      </footer>
-    </main>
   </div>
-</div>
+</header>
+
+<main class="wrap">
+
+  <!-- 订阅地址 -->
+  <section class="card sub-card">
+    <div class="sub-head">
+      <div>
+        <h2>图标库订阅地址</h2>
+        <p>复制地址，粘贴到 Emby 客户端的「图标库 / 图标订阅」里，即可一次性加载全部图标。</p>
+      </div>
+      <span class="pill" id="subCount">0 个图标</span>
+    </div>
+
+    <div class="seg" id="cdnSeg">
+      <button type="button" class="seg-btn on" data-cdn="jsdelivr">jsDelivr · 国内推荐</button>
+      <button type="button" class="seg-btn" data-cdn="raw">GitHub Raw</button>
+    </div>
+
+    <div class="copy-row">
+      <input id="subUrl" readonly value="" spellcheck="false" aria-label="图标库订阅地址">
+      <button type="button" class="btn primary" id="copySubBtn">复制</button>
+    </div>
+
+    <p class="sub-note" id="subNote">完成 GitHub 配置后自动生成。</p>
+  </section>
+
+  <!-- 首次引导 -->
+  <section class="card guide" id="guide" hidden>
+    <h2>三步开始使用</h2>
+    <ol class="steps">
+      <li><b>生成 Token</b>：GitHub → Settings → Developer settings → Fine-grained token，只给这个仓库的 <code>Contents</code> 读写权限。</li>
+      <li><b>粘贴 Token</b>：点右上角「设置 → 保存并连接」，仓库信息会自动识别，你只需要填 Token。</li>
+      <li><b>拖图上传</b>：图片按原样保存，上传完订阅地址就能用了。</li>
+    </ol>
+    <button type="button" class="btn primary" id="guideSetupBtn">去填写 Token</button>
+  </section>
+
+  <!-- 工具条 -->
+  <section class="toolbar">
+    <div class="search">
+      <svg class="ico"><use href="#i-search"/></svg>
+      <input id="searchInput" type="search" placeholder="搜索图标名称…" aria-label="搜索图标">
+    </div>
+    <button type="button" class="btn ghost" id="selectBtn" title="批量选择">
+      <svg class="ico"><use href="#i-check"/></svg>批量
+    </button>
+    <label class="btn primary" for="fileInput">
+      <svg class="ico"><use href="#i-plus"/></svg>上传图标
+    </label>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+  </section>
+
+  <!-- 批量操作条 -->
+  <section class="bulkbar" id="bulkBar" hidden>
+    <span id="bulkCount">已选 0 个</span>
+    <button type="button" class="btn ghost" id="bulkAll">全选</button>
+    <button type="button" class="btn ghost" id="bulkNone">清空</button>
+    <span class="spacer"></span>
+    <button type="button" class="btn primary" id="bulkDownload">
+      <svg class="ico"><use href="#i-download"/></svg>打包下载 ZIP
+    </button>
+  </section>
+
+  <!-- 拖拽区 -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-inner">
+      <strong>把图片拖到这里</strong>
+      <span>PNG / JPG / WEBP / GIF，可一次拖多张；原样保存，需要裁剪可上传后单独编辑</span>
+    </div>
+  </div>
+
+  <!-- 图标网格 -->
+  <section id="iconGrid" class="grid" aria-live="polite"></section>
+
+  <p id="empty" class="state" hidden>图标库还是空的。拖图片到上面，或点「上传图标」添加第一个。</p>
+  <p id="noResult" class="state" hidden>没有匹配「<b id="noResultKey"></b>」的图标。</p>
+  <button id="loadMore" class="btn ghost block" hidden>显示更多</button>
+
+  <footer class="site-foot">
+    <span>Icon · 自建 Emby 图标库</span>
+    <a id="repoLink" href="https://github.com/Wliky/Icon" target="_blank" rel="noopener">
+      <svg class="ico fill"><use href="#i-github"/></svg><span id="repoLabel">Wliky/Icon</span>
+    </a>
+  </footer>
+</main>
 
 <!-- ============ 设置 ============ -->
 <div class="modal" id="settingsModal" hidden>
@@ -274,27 +228,14 @@
         <input id="cfgBgUrl" placeholder="https://…/wallpaper.jpg" autocomplete="off" spellcheck="false">
       </label>
       <label class="field">
-        <span>遮罩浓度 <b id="cfgBgDimVal">60%</b></span>
+        <span>背景遮罩 <b id="cfgBgDimVal">60%</b></span>
         <input id="cfgBgDim" type="range" min="0" max="90" step="5" value="60">
       </label>
-      <div class="bg-grid">
-        <div class="field">
-          <span>遮罩颜色</span>
-          <div class="seg" id="cfgBgVeil">
-            <button type="button" class="seg-btn on" data-veil="dark">暗纱 · 推荐</button>
-            <button type="button" class="seg-btn" data-veil="light">亮纱</button>
-          </div>
-        </div>
-        <label class="field">
-          <span>背景模糊 <b id="cfgBgBlurVal">0px</b></span>
-          <input id="cfgBgBlur" type="range" min="0" max="20" step="2" value="0">
-        </label>
-      </div>
       <div class="row-end">
         <button type="button" class="btn ghost" id="bgClearBtn">清除背景</button>
         <button type="button" class="btn ghost" id="bgApplyBtn">预览背景</button>
       </div>
-      <p class="hint">彩色壁纸建议「暗纱 + 模糊 6px」，卡片上的文字会清楚很多。背景图只存本机，不影响仓库与订阅地址。</p>
+      <p class="hint">背景图只存在本机浏览器，不影响仓库与订阅地址。留空为纯色背景。</p>
     </div>
     <footer class="modal-foot">
       <button type="button" class="btn danger-text" id="clearSettingsBtn">清除本机配置</button>
@@ -451,18 +392,9 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <div class="loading" id="loading">
-  <div class="loading-card">
-    <span class="spinner"></span>
-    <div class="loading-body">
-      <div class="loading-row">
-        <span id="loadingText">处理中…</span>
-        <span class="loading-pct" id="loadingPct"></span>
-      </div>
-      <div class="progress"><div class="progress-bar" id="loadingBar"></div></div>
-    </div>
-  </div>
+  <div class="loading-card"><span class="spinner"></span><span id="loadingText">处理中…</span></div>
 </div>
 
-<script src="assets/app.js?v=6"></script>
+<script src="assets/app.js?v=7"></script>
 </body>
 </html>
