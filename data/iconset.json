@@ -1,10 +1,10 @@
 {
-  "name": "Emby Icon Studio",
+  "name": "Icon",
   "description": "共 1 个图标 · 更新于 2026-09-11",
   "icons": [
     {
       "name": "1111",
-      "url": "https://raw.githubusercontent.com/Wliky/Emby-Icon-Studio/main/icons/1111.png"
+      "url": "https://raw.githubusercontent.com/Wliky/Icon/main/icons/1111.png"
     }
   ]
 }

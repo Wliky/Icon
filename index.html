@@ -1,380 +1,251 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="Emby Icon Studio - 自用 Emby 图标管理与制作工具">
-  <meta name="theme-color" content="#0b0d12">
-  <title>Emby Icon Studio</title>
-
-  <meta property="og:type" content="website">
-  <meta property="og:title" content="Emby Icon Studio">
-  <meta property="og:description" content="纯前端 Emby 图标制作与管理工具，裁剪、透明度、512×512 输出，直接存进你的 GitHub 仓库。">
-  <meta property="og:url" content="https://wliky.github.io/Emby-Icon-Studio/">
-  <meta name="twitter:card" content="summary">
-
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230b0d12'/%3E%3Ccircle cx='32' cy='32' r='15' fill='%2352b54b'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="assets/style.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Icon · Emby 图标库</title>
+<meta name="description" content="Icon —— 自建 Emby 图标库。上传图标，得到一个标准 JSON 订阅地址，主流 Emby 三方客户端都能直接加载。">
+<meta name="theme-color" content="#f5f6f8">
+<meta property="og:title" content="Icon · Emby 图标库">
+<meta property="og:description" content="自建 Emby 图标库，上传即用，输出标准 JSON 订阅地址。">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%234f46e5'/%3E%3Ctext x='32' y='45' font-size='38' font-family='Helvetica,Arial,sans-serif' font-weight='700' fill='white' text-anchor='middle'%3EI%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="assets/style.css">
 </head>
 <body>
 
-  <!-- 背景光斑（玻璃拟态的底层） -->
-  <div class="bg-decor" aria-hidden="true">
-    <span class="blob blob-1"></span>
-    <span class="blob blob-2"></span>
-    <span class="blob blob-3"></span>
-  </div>
-
-  <!-- ===== 顶部导航 ===== -->
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand">
-        <span class="brand-logo">🎬</span>
-        <div class="brand-text">
-          <h1>Emby Icon Studio</h1>
-          <p>自用图标管理器</p>
-        </div>
-      </div>
-      <div class="topbar-actions">
-        <div class="search-box">
-          <span class="search-icon">🔍</span>
-          <input id="searchInput" type="search" placeholder="搜索图标……" autocomplete="off">
-        </div>
-        <button id="themeBtn" class="btn btn-ghost btn-icon" type="button" title="切换主题">🌓</button>
-        <button id="refreshBtn" class="btn btn-ghost btn-icon" type="button" title="从 GitHub 重新拉取图标索引">⟳</button>
-        <button id="clientBtn" class="btn btn-ghost" type="button" title="导出并导入到 Emby 客户端">客户端</button>
-        <a id="repoLink" class="btn btn-ghost" target="_blank" rel="noopener" hidden>GitHub</a>
-        <button id="settingsBtn" class="btn btn-ghost" type="button">🔒 GitHub 设置</button>
-      </div>
+<header class="topbar">
+  <div class="wrap topbar-inner">
+    <div class="brand">
+      <span class="mark">I</span>
+      <span class="brand-text">
+        <strong>Icon</strong>
+        <small>Emby 图标库</small>
+      </span>
     </div>
-  </header>
+    <div class="topbar-actions">
+      <button id="themeBtn" class="icon-btn" title="切换主题（跟随系统 / 浅色 / 深色）" aria-label="切换主题">🌓</button>
+      <button id="refreshBtn" class="icon-btn" title="刷新图标库" aria-label="刷新">⟳</button>
+      <button id="settingsBtn" class="btn ghost">🔒 设置</button>
+    </div>
+  </div>
+</header>
 
-  <main class="main">
-    <section class="panel">
-      <div class="panel-head">
-        <h2>我的 Emby 图标库 <span id="iconCount" class="count-badge" hidden></span></h2>
-        <button id="uploadBtn" class="btn btn-primary" type="button">＋ 上传图标</button>
+<main class="wrap">
+
+  <!-- 订阅地址：项目存在的意义 -->
+  <section class="card sub-card">
+    <div class="sub-head">
+      <div>
+        <h2>图标库订阅地址</h2>
+        <p>复制地址，粘贴到 Emby 客户端的「图标库 / 图标订阅」里，即可一次性加载全部图标。</p>
       </div>
-      <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" hidden>
+      <span class="pill" id="subCount">0 个图标</span>
+    </div>
 
-      <div id="configHint" class="config-hint" hidden>
-        <p>还没有配置 GitHub。填写用户名、仓库与 Token 后即可使用；如果这台设备是第一次打开，也可以直接把已有配置导入进来。</p>
-        <div class="preset-row" style="margin-top:10px">
-          <button id="hintSettingsBtn" class="btn btn-ghost btn-small" type="button">去填写配置</button>
-          <button id="hintImportBtn" class="btn btn-ghost btn-small" type="button">导入已有配置</button>
-        </div>
-      </div>
+    <div class="seg" id="cdnSeg">
+      <button type="button" class="seg-btn on" data-cdn="jsdelivr">jsDelivr · 国内推荐</button>
+      <button type="button" class="seg-btn" data-cdn="raw">GitHub Raw</button>
+    </div>
 
-      <div id="dropZone" class="drop-zone">
-        <div class="drop-zone-icon">🖼️</div>
-        <p><strong>把图片拖到这里</strong>，或点上方「＋ 上传图标」</p>
-        <p class="drop-zone-sub">支持 PNG / JPG / JPEG / WEBP / GIF，单张最大 10MB，统一输出 512×512</p>
-      </div>
+    <div class="copy-row">
+      <input id="subUrl" readonly value="" spellcheck="false" aria-label="图标库订阅地址">
+      <button type="button" class="btn primary" id="copySubBtn">复制</button>
+    </div>
 
-      <div id="emptyState" class="empty-state" hidden>
-        图标库还是空的。把图片拖到上面，或点「＋ 上传图标」做第一张。
-      </div>
+    <p class="sub-note" id="subNote">完成 GitHub 配置后自动生成。</p>
+  </section>
 
-      <div id="iconGrid" class="icon-grid"></div>
-      <div id="loadMore" class="load-more" hidden>
-        <button id="loadMoreBtn" class="btn btn-ghost" type="button">显示更多</button>
-      </div>
-      <div id="noResult" class="empty-state" hidden>没有匹配「<span id="noResultKey"></span>」的图标</div>
-    </section>
-  </main>
+  <!-- 首次引导 -->
+  <section class="card guide" id="guide" hidden>
+    <h2>三步开始使用</h2>
+    <ol class="steps">
+      <li><b>生成 Token</b>：GitHub → Settings → Developer settings → Fine-grained token，只给这个仓库的 <code>Contents</code> 读写权限。</li>
+      <li><b>粘贴 Token</b>：点右上角「设置 → 保存并连接」，仓库信息会自动识别，你只需要填 Token。</li>
+      <li><b>拖图上传</b>：图片按原样保存，上传完订阅地址就能用了。</li>
+    </ol>
+    <button type="button" class="btn primary" id="guideSetupBtn">去填写 Token</button>
+  </section>
 
-  <!-- ===== 图标编辑器 ===== -->
-  <div id="editorModal" class="modal">
-    <div class="modal-dialog editor-dialog">
-      <div class="modal-head">
-        <h3>图标编辑</h3>
-        <button id="editorClose" class="icon-btn" type="button" aria-label="关闭">✕</button>
-      </div>
-      <div class="editor-body">
-        <div class="editor-stage-side">
-          <div class="stage-clip">
-            <div id="cropStage" class="crop-stage">
-              <img id="cropImg" alt="待裁剪图片" draggable="false">
-              <div id="cropArea" class="crop-area"></div>
-            </div>
-          </div>
-          <p class="hint">拖动图片调整位置 · 滚轮缩放</p>
-        </div>
+  <!-- 工具条 -->
+  <section class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 4a6 6 0 014.47 10.03l4.25 4.25-1.41 1.41-4.25-4.25A6 6 0 1110 4zm0 2a4 4 0 100 8 4 4 0 000-8z"/></svg>
+      <input id="searchInput" type="search" placeholder="搜索图标名称…" aria-label="搜索图标">
+    </div>
+    <label class="btn primary" for="fileInput">＋ 上传图标</label>
+    <input id="fileInput" type="file" accept="image/*" multiple hidden>
+  </section>
 
-        <div class="editor-controls">
-          <div class="control-group">
-            <label class="control-label" for="iconName">图标名称</label>
-            <input id="iconName" type="text" placeholder="例如：羊羊羊" autocomplete="off">
-          </div>
-
-          <div class="control-group">
-            <span class="control-label">裁剪形状</span>
-            <div class="radio-row">
-              <label><input id="shapeCircle" type="radio" name="shape" value="circle" checked> ○ 圆形</label>
-              <label><input id="shapeSquare" type="radio" name="shape" value="square"> □ 方形</label>
-            </div>
-          </div>
-
-          <div class="control-group">
-            <label class="control-label" for="opacityRange">透明度 <span id="opacityVal" class="range-val">80%</span></label>
-            <input id="opacityRange" type="range" min="10" max="100" step="1" value="80">
-          </div>
-
-          <div class="control-group">
-            <label class="control-label" for="zoomRange">缩放 <span id="zoomVal" class="range-val">100%</span></label>
-            <input id="zoomRange" type="range" min="50" max="300" step="1" value="100">
-          </div>
-
-          <div class="control-group">
-            <span class="control-label">预览（512 × 512）</span>
-            <canvas id="previewCanvas" class="preview-canvas" width="512" height="512"></canvas>
-          </div>
-
-          <div class="btn-row">
-            <button id="generateBtn" class="btn btn-primary" type="button">生成 PNG</button>
-            <button id="resetBtn" class="btn btn-ghost" type="button">重置</button>
-          </div>
-        </div>
-      </div>
+  <!-- 拖拽区 -->
+  <div id="dropzone" class="dropzone">
+    <div class="dropzone-inner">
+      <strong>把图片拖到这里</strong>
+      <span>PNG / JPG / WEBP / GIF，原样保存，不做任何裁剪或压缩</span>
     </div>
   </div>
 
-  <!-- ===== 配置迁移（加密导出 / 导入） ===== -->
-  <div id="transferModal" class="modal">
-    <div class="modal-dialog modal-dialog-sm">
-      <div class="modal-head">
-        <h3>配置迁移</h3>
-        <button class="icon-btn" type="button" data-close="transferModal" aria-label="关闭">✕</button>
+  <!-- 图标网格 -->
+  <section id="iconGrid" class="grid" aria-live="polite"></section>
+
+  <p id="empty" class="state" hidden>图标库还是空的。拖图片到上面，或点「＋ 上传图标」添加第一个。</p>
+  <p id="noResult" class="state" hidden>没有匹配「<b id="noResultKey"></b>」的图标。</p>
+  <button id="loadMore" class="btn ghost block" hidden>显示更多</button>
+
+  <footer class="site-foot">
+    <span>Icon · 自建 Emby 图标库</span>
+    <a id="repoLink" href="https://github.com" target="_blank" rel="noopener" hidden>打开仓库</a>
+  </footer>
+</main>
+
+<!-- ============ 设置 ============ -->
+<div class="modal" id="settingsModal" hidden>
+  <div class="modal-card">
+    <header class="modal-head">
+      <h3>GitHub 设置</h3>
+      <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <div class="infer" id="inferBox">
+        <div class="infer-row"><span>仓库</span><b id="inferRepo">—</b></div>
+        <div class="infer-row"><span>分支</span><b id="inferBranch">—</b></div>
+        <div class="infer-row"><span>图标目录</span><b id="inferDir">icons/</b></div>
+        <p class="hint" id="inferHint">以上信息从当前网址自动识别，一般不需要改。</p>
       </div>
-      <div class="form-body">
-        <div class="preset-row" style="margin-bottom:14px">
-          <button id="tabExport" class="btn btn-ghost btn-small" type="button">导出到别处用</button>
-          <button id="tabImport" class="btn btn-ghost btn-small" type="button">在这台设备导入</button>
-        </div>
 
-        <p class="hint" id="transferHint"></p>
+      <label class="field">
+        <span>GitHub Token</span>
+        <span class="pwd-row">
+          <input id="cfgToken" type="password" placeholder="github_pat_… 或 ghp_…" autocomplete="off" spellcheck="false">
+          <button type="button" class="mini" data-toggle-pwd="cfgToken">显示</button>
+        </span>
+      </label>
 
-        <div class="control-group">
-          <label class="control-label" for="transferPwd">保护密码</label>
-          <div class="input-with-action">
-            <input id="transferPwd" type="password" placeholder="用于加密 / 解密，请记牢" autocomplete="off">
-            <button class="input-action" type="button" data-toggle-pwd="transferPwd">显示</button>
-          </div>
-        </div>
+      <details class="adv" id="advBox">
+        <summary>高级：手动指定仓库</summary>
+        <label class="field"><span>用户名</span><input id="cfgOwner" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>仓库</span><input id="cfgRepo" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>分支</span><input id="cfgBranch" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>图标目录</span><input id="cfgDir" autocomplete="off" spellcheck="false"></label>
+      </details>
 
-        <div id="transferIn" hidden>
-          <div class="control-group">
-            <label class="control-label" for="transferText">导出内容</label>
-            <textarea id="transferText" rows="4" spellcheck="false" placeholder="粘贴 EIS1.… 开头的内容"></textarea>
-          </div>
-        </div>
-
-        <div id="transferOut" hidden>
-          <div class="control-group">
-            <label class="control-label" for="transferResult">导出结果</label>
-            <textarea id="transferResult" rows="4" readonly spellcheck="false"></textarea>
-            <div class="btn-row">
-              <button id="copyTransfer" class="btn btn-ghost btn-small" type="button">复制</button>
-              <button id="downloadTransfer" class="btn btn-ghost btn-small" type="button">下载为 txt</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="btn-row">
-          <button id="transferPrimary" class="btn btn-primary" type="button">生成</button>
-        </div>
-      </div>
+      <p class="hint">Token 只存在这台设备的浏览器里，不会写进仓库，也不会发给任何第三方服务器。</p>
     </div>
+    <footer class="modal-foot">
+      <button type="button" class="btn danger-text" id="clearSettingsBtn">清除本机配置</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="button" class="btn primary" id="saveSettingsBtn">保存并连接</button>
+    </footer>
   </div>
+</div>
 
-  <!-- ===== 导出与客户端导入 ===== -->
-  <div id="clientModal" class="modal">
-    <div class="modal-dialog modal-dialog-sm">
-      <div class="modal-head">
-        <h3>导出与客户端导入</h3>
-        <button class="icon-btn" type="button" data-close="clientModal" aria-label="关闭">✕</button>
-      </div>
-      <div class="form-body">
-        <div class="control-group">
-          <span class="control-label">图标库地址</span>
-          <div class="copy-row">
-            <input id="iconsetUrl" type="text" readonly>
-            <button id="copyIconset" class="btn btn-ghost btn-small" type="button">复制</button>
-          </div>
-          <p class="hint">Fileball / Yamby / Hills 等客户端：复制地址，在 App 的「图标库 / 图标订阅」里粘贴添加即可。</p>
-        </div>
-
-        <div class="control-group">
-          <span class="control-label">一键导入（手机上点击）</span>
-          <div class="preset-row">
-            <a id="senplayerLink" class="btn btn-ghost btn-small" href="#">📺 Senplayer</a>
-            <a id="rodelLink" class="btn btn-ghost btn-small" href="#">🎞 小幻影视</a>
-          </div>
-        </div>
-
-        <div class="control-group">
-          <span class="control-label">导出为文本</span>
-          <div class="btn-row">
-            <button id="exportTxtBtn" class="btn btn-ghost" type="button">下载 URL 列表（txt）</button>
-          </div>
-          <p class="hint">每行一条：<code>名称 + Tab + 地址</code>，可直接粘进表格。</p>
-        </div>
-      </div>
+<!-- ============ 设置访问密码 ============ -->
+<div class="modal" id="lockSetupModal" hidden>
+  <div class="modal-card narrow">
+    <header class="modal-head">
+      <h3>设置访问密码</h3>
+      <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <p class="hint">给「设置」加一道锁。密码只以哈希形式存在本机，无法被还原。</p>
+      <label class="field"><span>新密码</span>
+        <span class="pwd-row"><input id="newPwd" type="password" autocomplete="new-password"><button type="button" class="mini" data-toggle-pwd="newPwd">显示</button></span>
+      </label>
+      <label class="field"><span>确认密码</span>
+        <span class="pwd-row"><input id="confirmPwd" type="password" autocomplete="new-password"><button type="button" class="mini" data-toggle-pwd="confirmPwd">显示</button></span>
+      </label>
     </div>
+    <footer class="modal-foot">
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="button" class="btn primary" id="pwdSetupOk">设置并继续</button>
+    </footer>
   </div>
+</div>
 
-  <!-- ===== 设置访问密码：首次设置 ===== -->
-  <div id="lockSetupModal" class="modal">
-    <div class="modal-dialog modal-dialog-sm">
-      <div class="modal-head">
-        <h3>设置访问密码</h3>
-        <button class="icon-btn" type="button" data-close="lockSetupModal" aria-label="关闭">✕</button>
-      </div>
-      <div class="form-body">
-        <p class="hint">给「GitHub 设置」加一道锁。密码只以哈希形式存在本机浏览器，不会上传到任何地方。</p>
-        <div class="control-group">
-          <label class="control-label" for="newPwd">新密码</label>
-          <div class="input-with-action">
-            <input id="newPwd" type="password" placeholder="至少 4 位" autocomplete="new-password">
-            <button class="input-action" type="button" data-toggle-pwd="newPwd">显示</button>
-          </div>
-        </div>
-        <div class="control-group">
-          <label class="control-label" for="confirmPwd">确认密码</label>
-          <input id="confirmPwd" type="password" placeholder="再输入一次" autocomplete="new-password">
-        </div>
-        <div class="btn-row">
-          <button id="cancelPwdSetup" class="btn btn-ghost" type="button">取消</button>
-          <button id="confirmPwdSetup" class="btn btn-primary" type="button">设置并继续</button>
-        </div>
-      </div>
+<div class="modal" id="lockVerifyModal" hidden>
+  <div class="modal-card narrow">
+    <header class="modal-head">
+      <h3>需要密码</h3>
+      <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <p class="hint">验证后即可查看和修改已保存的设置。</p>
+      <label class="field"><span>访问密码</span>
+        <span class="pwd-row"><input id="authPwd" type="password" autocomplete="current-password"><button type="button" class="mini" data-toggle-pwd="authPwd">显示</button></span>
+      </label>
+      <p class="err" id="authErr" hidden>密码不正确</p>
     </div>
+    <footer class="modal-foot">
+      <button type="button" class="btn danger-text" id="forgetPwdBtn">忘记密码？重置本机数据</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="button" class="btn primary" id="authOk">解锁</button>
+    </footer>
   </div>
+</div>
 
-  <!-- ===== 设置访问密码：验证 ===== -->
-  <div id="lockVerifyModal" class="modal">
-    <div class="modal-dialog modal-dialog-sm">
-      <div class="modal-head">
-        <h3>需要密码</h3>
-        <button class="icon-btn" type="button" data-close="lockVerifyModal" aria-label="关闭">✕</button>
-      </div>
-      <div class="form-body">
-        <p class="hint">「GitHub 设置」受密码保护，验证后即可查看和修改已保存的信息。</p>
-        <div class="control-group">
-          <label class="control-label" for="authPwd">访问密码</label>
-          <div class="input-with-action">
-            <input id="authPwd" type="password" placeholder="输入访问密码" autocomplete="current-password">
-            <button class="input-action" type="button" data-toggle-pwd="authPwd">显示</button>
-          </div>
-        </div>
-        <p id="authErr" class="hint err-text" hidden>密码不正确</p>
-        <div class="btn-row">
-          <button id="cancelAuth" class="btn btn-ghost" type="button">取消</button>
-          <button id="confirmAuth" class="btn btn-primary" type="button">解锁</button>
-        </div>
-        <div class="btn-row">
-          <button id="forgetPwd" class="btn btn-danger" type="button">忘记密码？重置本机数据</button>
-        </div>
-      </div>
+<!-- ============ 重命名 ============ -->
+<div class="modal" id="renameModal" hidden>
+  <div class="modal-card narrow">
+    <header class="modal-head">
+      <h3>重命名图标</h3>
+      <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body">
+      <label class="field"><span>图标名称</span><input id="renameInput" maxlength="60" autocomplete="off"></label>
+      <p class="hint">只改显示名称，文件名和图片地址保持不变。</p>
     </div>
+    <footer class="modal-foot">
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="button" class="btn primary" id="renameOk">保存</button>
+    </footer>
   </div>
+</div>
 
-  <!-- ===== GitHub 设置 ===== -->
-  <div id="settingsModal" class="modal">
-    <div class="modal-dialog">
-      <div class="modal-head">
-        <h3>GitHub 设置</h3>
-        <button class="icon-btn" type="button" data-close="settingsModal" aria-label="关闭">✕</button>
-      </div>
-      <div class="form-body">
-        <div class="control-group">
-          <label class="control-label" for="cfgOwner">GitHub 用户名</label>
-          <input id="cfgOwner" type="text" placeholder="yourname" autocomplete="off">
-        </div>
-        <div class="control-group">
-          <label class="control-label" for="cfgRepo">仓库</label>
-          <input id="cfgRepo" type="text" placeholder="emby-icon" autocomplete="off">
-        </div>
-        <div class="form-row">
-          <div class="control-group">
-            <label class="control-label" for="cfgBranch">分支</label>
-            <input id="cfgBranch" type="text" placeholder="main" autocomplete="off">
-          </div>
-          <div class="control-group">
-            <label class="control-label" for="cfgDir">图标目录</label>
-            <input id="cfgDir" type="text" placeholder="icons" autocomplete="off">
-          </div>
-        </div>
-        <div class="control-group">
-          <label class="control-label" for="cfgToken">GitHub Token</label>
-          <div class="input-with-action">
-            <input id="cfgToken" type="password" placeholder="ghp_xxxxxxxx / github_pat_xxxxxxxx" autocomplete="off">
-            <button class="input-action" type="button" data-toggle-pwd="cfgToken">显示</button>
-          </div>
-        </div>
-        <p class="hint">
-          建议使用 Fine-grained Personal Access Token，仅授予目标仓库的 Contents 读写权限。
-          Token 只保存在当前浏览器 localStorage，不会提交到仓库或上传到任何第三方服务器。
-        </p>
-        <div class="btn-row">
-          <button id="saveSettings" class="btn btn-primary" type="button">保存</button>
-          <button id="cancelSettings" class="btn btn-ghost" type="button">取消</button>
-        </div>
-        <div class="btn-row">
-          <button id="exportConfigBtn" class="btn btn-ghost" type="button">导出配置到别处用</button>
-          <button id="clearSettings" class="btn btn-danger" type="button">清除本机配置</button>
-        </div>
-      </div>
+<!-- ============ 通用确认 ============ -->
+<div class="modal" id="confirmModal" hidden>
+  <div class="modal-card narrow">
+    <header class="modal-head">
+      <h3 id="confirmTitle">确认</h3>
+      <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body"><p id="confirmText" class="confirm-text"></p></div>
+    <footer class="modal-foot">
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" data-close>取消</button>
+      <button type="button" class="btn danger" id="confirmOk">删除</button>
+    </footer>
+  </div>
+</div>
+
+<!-- ============ 预览 ============ -->
+<div class="modal" id="previewModal" hidden>
+  <div class="modal-card narrow">
+    <header class="modal-head">
+      <h3 id="previewName">预览</h3>
+      <button type="button" class="icon-btn" data-close aria-label="关闭">✕</button>
+    </header>
+    <div class="modal-body center">
+      <img id="previewImg" alt="图标预览">
+      <p class="hint mono" id="previewFile"></p>
     </div>
+    <footer class="modal-foot">
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" id="previewCopy">复制地址</button>
+      <button type="button" class="btn primary" data-close>关闭</button>
+    </footer>
   </div>
+</div>
 
-  <!-- ===== 删除确认 ===== -->
-  <div id="confirmModal" class="modal">
-    <div class="modal-dialog modal-dialog-sm">
-      <div class="modal-head">
-        <h3>删除图标</h3>
-        <button class="icon-btn" type="button" data-close="confirmModal" aria-label="关闭">✕</button>
-      </div>
-      <div class="form-body">
-        <p id="confirmText" class="confirm-text"></p>
-        <div class="btn-row">
-          <button id="cancelDelete" class="btn btn-ghost" type="button">取消</button>
-          <button id="confirmDelete" class="btn btn-danger" type="button">删除</button>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <!-- ===== 重命名 ===== -->
-  <div id="renameModal" class="modal">
-    <div class="modal-dialog modal-dialog-sm">
-      <div class="modal-head">
-        <h3>重命名图标</h3>
-        <button class="icon-btn" type="button" data-close="renameModal" aria-label="关闭">✕</button>
-      </div>
-      <div class="form-body">
-        <div class="control-group">
-          <label class="control-label" for="renameInput">图标名称</label>
-          <input id="renameInput" type="text" placeholder="例如：羊羊羊" autocomplete="off">
-        </div>
-        <p class="hint">只修改索引中的显示名称，文件名与图片地址保持不变。</p>
-        <div class="btn-row">
-          <button id="cancelRename" class="btn btn-ghost" type="button">取消</button>
-          <button id="confirmRename" class="btn btn-primary" type="button">保存</button>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="loading" id="loading">
+  <div class="loading-card"><span class="spinner"></span><span id="loadingText">处理中…</span></div>
+</div>
 
-  <!-- ===== 全局提示 ===== -->
-  <div id="toast" class="toast" role="status"></div>
-  <div id="loading" class="loading">
-    <div class="loading-box">
-      <div class="spinner"></div>
-      <p id="loadingText">处理中…</p>
-    </div>
-  </div>
-
-  <script src="assets/app.js"></script>
+<script src="assets/app.js"></script>
 </body>
 </html>
