@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Emby Icon Studio - 自用 Emby 图标管理与制作工具">
+  <title>Emby Icon Studio</title>
+  <link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+  <!-- ===== 顶部导航 ===== -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-logo">🎬</span>
+        <div class="brand-text">
+          <h1>Emby Icon Studio</h1>
+          <p>自用图标管理器</p>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input id="searchInput" type="search" placeholder="搜索图标……" autocomplete="off">
+        </div>
+        <a id="repoLink" class="btn btn-ghost" target="_blank" rel="noopener" hidden>GitHub</a>
+        <button id="settingsBtn" class="btn btn-ghost" type="button">GitHub 设置</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="main">
+    <section class="panel">
+      <div class="panel-head">
+        <h2>我的 Emby 图标库</h2>
+        <button id="uploadBtn" class="btn btn-primary" type="button">＋ 上传图标</button>
+      </div>
+      <input id="fileInput" type="file" accept=".png,.jpg,.jpeg,.webp,.gif,image/png,image/jpeg,image/webp,image/gif" hidden>
+
+      <div id="configHint" class="config-hint" hidden>
+        尚未配置 GitHub。点击右上角「GitHub 设置」，填写用户名、仓库与 Token 后即可上传和管理图标。
+      </div>
+
+      <div id="dropZone" class="drop-zone">
+        <div class="drop-zone-icon">🖼️</div>
+        <p><strong>拖拽图片到此处</strong>，或点击右上角「＋ 上传图标」</p>
+        <p class="drop-zone-sub">支持 PNG / JPG / JPEG / WEBP / GIF，最大 10MB</p>
+      </div>
+
+      <div id="emptyState" class="empty-state" hidden>还没有图标，上传一张开始制作吧</div>
+
+      <div id="iconGrid" class="icon-grid"></div>
+    </section>
+  </main>
+
+  <!-- ===== 图标编辑器 ===== -->
+  <div id="editorModal" class="modal">
+    <div class="modal-dialog editor-dialog">
+      <div class="modal-head">
+        <h3>图标编辑</h3>
+        <button id="editorClose" class="icon-btn" type="button" aria-label="关闭">✕</button>
+      </div>
+      <div class="editor-body">
+        <div class="editor-stage-side">
+          <div class="stage-clip">
+            <div id="cropStage" class="crop-stage">
+              <img id="cropImg" alt="待裁剪图片" draggable="false">
+              <div id="cropArea" class="crop-area"></div>
+            </div>
+          </div>
+          <p class="hint">拖动图片调整位置 · 滚轮缩放</p>
+        </div>
+
+        <div class="editor-controls">
+          <div class="control-group">
+            <label class="control-label" for="iconName">图标名称</label>
+            <input id="iconName" type="text" placeholder="例如：羊羊羊" autocomplete="off">
+          </div>
+
+          <div class="control-group">
+            <span class="control-label">裁剪形状</span>
+            <div class="radio-row">
+              <label><input id="shapeCircle" type="radio" name="shape" value="circle" checked> ○ 圆形</label>
+              <label><input id="shapeSquare" type="radio" name="shape" value="square"> □ 方形</label>
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label" for="opacityRange">透明度 <span id="opacityVal" class="range-val">80%</span></label>
+            <input id="opacityRange" type="range" min="10" max="100" step="1" value="80">
+          </div>
+
+          <div class="control-group">
+            <label class="control-label" for="zoomRange">缩放 <span id="zoomVal" class="range-val">100%</span></label>
+            <input id="zoomRange" type="range" min="50" max="300" step="1" value="100">
+          </div>
+
+          <div class="control-group">
+            <span class="control-label">预览（512 × 512）</span>
+            <canvas id="previewCanvas" class="preview-canvas" width="512" height="512"></canvas>
+          </div>
+
+          <div class="btn-row">
+            <button id="generateBtn" class="btn btn-primary" type="button">生成 PNG</button>
+            <button id="resetBtn" class="btn btn-ghost" type="button">重置</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== GitHub 设置 ===== -->
+  <div id="settingsModal" class="modal">
+    <div class="modal-dialog">
+      <div class="modal-head">
+        <h3>GitHub 设置</h3>
+        <button class="icon-btn" type="button" data-close="settingsModal" aria-label="关闭">✕</button>
+      </div>
+      <div class="form-body">
+        <div class="control-group">
+          <label class="control-label" for="cfgOwner">GitHub 用户名</label>
+          <input id="cfgOwner" type="text" placeholder="yourname" autocomplete="off">
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="cfgRepo">仓库</label>
+          <input id="cfgRepo" type="text" placeholder="emby-icon" autocomplete="off">
+        </div>
+        <div class="form-row">
+          <div class="control-group">
+            <label class="control-label" for="cfgBranch">分支</label>
+            <input id="cfgBranch" type="text" placeholder="main" autocomplete="off">
+          </div>
+          <div class="control-group">
+            <label class="control-label" for="cfgDir">图标目录</label>
+            <input id="cfgDir" type="text" placeholder="icons" autocomplete="off">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="cfgToken">GitHub Token</label>
+          <input id="cfgToken" type="password" placeholder="ghp_xxxxxxxx / github_pat_xxxxxxxx" autocomplete="off">
+        </div>
+        <p class="hint">
+          建议使用 Fine-grained Personal Access Token，仅授予目标仓库的 Contents 读写权限。
+          Token 只保存在当前浏览器 localStorage，不会提交到仓库或上传到任何第三方服务器。
+        </p>
+        <div class="btn-row">
+          <button id="saveSettings" class="btn btn-primary" type="button">保存</button>
+          <button id="cancelSettings" class="btn btn-ghost" type="button">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 删除确认 ===== -->
+  <div id="confirmModal" class="modal">
+    <div class="modal-dialog modal-dialog-sm">
+      <div class="modal-head">
+        <h3>删除图标</h3>
+        <button class="icon-btn" type="button" data-close="confirmModal" aria-label="关闭">✕</button>
+      </div>
+      <div class="form-body">
+        <p id="confirmText" class="confirm-text"></p>
+        <div class="btn-row">
+          <button id="cancelDelete" class="btn btn-ghost" type="button">取消</button>
+          <button id="confirmDelete" class="btn btn-danger" type="button">删除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 全局提示 ===== -->
+  <div id="toast" class="toast" role="status"></div>
+  <div id="loading" class="loading">
+    <div class="loading-box">
+      <div class="spinner"></div>
+      <p id="loadingText">处理中…</p>
+    </div>
+  </div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
