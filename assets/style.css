@@ -153,6 +153,19 @@ input { font: inherit; color: inherit; }
 }
 .panel-head h2 { font-size: 17px; font-weight: 700; }
 
+.count-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--card-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  vertical-align: 2px;
+}
+
 .config-hint {
   background: rgba(82, 181, 75, 0.08);
   border: 1px solid rgba(82, 181, 75, 0.35);
@@ -230,6 +243,7 @@ input { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .icon-actions { display: flex; gap: 8px; justify-content: center; }
+.icon-actions .btn { flex: 1; padding-left: 6px; padding-right: 6px; }
 
 /* ===== 弹窗 ===== */
 .modal {
@@ -301,6 +315,24 @@ input { font: inherit; color: inherit; }
 }
 .control-group input:focus { border-color: var(--accent); }
 .control-group input::placeholder { color: #5a6275; }
+
+/* 输入框右侧内嵌操作（如显示 Token） */
+.input-with-action { position: relative; }
+.input-with-action input { padding-right: 56px; }
+.input-action {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+.input-action:hover { color: var(--text); background: var(--card); }
 
 .hint { font-size: 12.5px; color: var(--muted); }
 .form-body .hint { margin-bottom: 16px; }

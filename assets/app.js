@@ -23,6 +23,7 @@ let icons = [];
 let editor = null;        // { img, w, h, x, y, zoom, opacity, shape }
 let currentFile = null;   // 当前编辑图片的 ObjectURL
 let pendingDelete = null;
+let pendingRename = null;
 let cacheBust = 0;        // 上传/删除后刷新缩略图缓存
 let pinyinLoader = null;
 
@@ -226,7 +227,14 @@ function decodeUtf8(b64) {
 }
 
 function encodeUtf8(str) {
-  return btoa(unescape(encodeURIComponent(str)));
+  // TextEncoder + 分块避免 apply 参数过多导致栈溢出（替代已废弃的 unescape）
+  const bytes = new TextEncoder().encode(str);
+  const CHUNK = 0x8000;
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(bin);
 }
 
 async function readIndex() {
@@ -298,16 +306,36 @@ function filteredIcons() {
   );
 }
 
+// 地址按「当前配置」实时拼出，不再依赖索引里存的绝对 url
+// 这样更换仓库 / 分支 / 目录后，历史图标地址自动跟着生效
 function iconUrl(icon) {
-  return icon.url || (isConfigReady() ? rawUrl(icon.file) : '');
+  if (isConfigReady()) return rawUrl(icon.file);
+  return icon.url || '';
 }
 
 function renderGrid() {
   const grid = $('iconGrid');
   grid.innerHTML = '';
   const list = filteredIcons();
-  $('emptyState').hidden = list.length > 0 || !isConfigReady();
-  $('configHint').hidden = isConfigReady();
+  const q = $('searchInput').value.trim();
+  const ready = isConfigReady();
+
+  $('emptyState').hidden = list.length > 0 || !ready;
+  $('configHint').hidden = ready;
+
+  // 图标计数：搜索时显示「命中 / 总数」
+  const countEl = $('iconCount');
+  if (ready && icons.length) {
+    countEl.hidden = false;
+    countEl.textContent = q ? `${list.length} / ${icons.length}` : String(icons.length);
+  } else {
+    countEl.hidden = true;
+  }
+
+  // 搜索无结果（区别于「一个图标都没有」）
+  const noHit = ready && icons.length > 0 && q.length > 0 && list.length === 0;
+  $('noResult').hidden = !noHit;
+  if (noHit) $('noResultKey').textContent = q;
 
   for (const icon of list) {
     const url = iconUrl(icon);
@@ -319,9 +347,13 @@ function renderGrid() {
       <div class="icon-name" title="${escapeHtml(icon.name || '')}">${escapeHtml(icon.name || icon.file)}</div>
       <div class="icon-actions">
         <button class="btn btn-ghost btn-small" data-act="copy" type="button">复制 URL</button>
+        <button class="btn btn-ghost btn-small" data-act="rename" type="button">重命名</button>
+      </div>
+      <div class="icon-actions">
         <button class="btn btn-danger btn-small" data-act="delete" type="button">删除</button>
       </div>`;
     card.querySelector('[data-act="copy"]').addEventListener('click', () => copyUrl(url));
+    card.querySelector('[data-act="rename"]').addEventListener('click', () => askRename(icon));
     card.querySelector('[data-act="delete"]').addEventListener('click', () => askDelete(icon));
     grid.appendChild(card);
   }
@@ -346,6 +378,25 @@ async function copyUrl(url) {
     }
     ta.remove();
   }
+}
+
+// 导出全部图标 URL（名称 + Tab + URL，便于直接粘贴到表格）
+function exportUrls() {
+  if (!icons.length) {
+    showToast('还没有图标可导出', 'err');
+    return;
+  }
+  const lines = icons.map((i) => `${i.name || i.file}\t${iconUrl(i)}`);
+  const blob = new Blob([lines.join('\n') + '\n'], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `emby-icons-${new Date().toISOString().slice(0, 10)}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  showToast(`✓ 已导出 ${icons.length} 条 URL`);
 }
 
 // ---------- 命名：name → slug → filename ----------
@@ -564,7 +615,8 @@ async function saveIcon() {
     await withRetryOnConflict(async () => {
       const idx = await readIndex();
       list = idx.list;
-      list.push({ name: name || file.replace(/\.png$/, ''), file, url: rawUrl(file) });
+      // 不再写入绝对 url：地址由当前配置实时拼出，换仓库/分支后不会失效
+      list.push({ name: name || file.replace(/\.png$/, ''), file });
       list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
       await writeIndex(list, idx.sha);
     });
@@ -627,6 +679,53 @@ async function doDelete() {
   }
 }
 
+// ---------- 重命名图标 ----------
+function askRename(icon) {
+  pendingRename = icon;
+  $('renameInput').value = icon.name || String(icon.file).replace(/\.png$/, '');
+  openModal('renameModal');
+  setTimeout(() => $('renameInput').select(), 0);
+}
+
+async function doRename() {
+  if (!pendingRename) return;
+  const icon = pendingRename;
+  const name = $('renameInput').value.trim();
+  if (!name) {
+    showToast('名称不能为空', 'err');
+    return;
+  }
+  if (name === (icon.name || '')) {
+    pendingRename = null;
+    closeModal('renameModal');
+    return;
+  }
+  pendingRename = null;
+  closeModals();
+  if (!requireConfig()) return;
+  try {
+    showLoading('正在重命名…');
+    let next;
+    await withRetryOnConflict(async () => {
+      const idx = await readIndex();
+      // 归一化条目：只保留 name / file，顺带清掉历史遗留的 url 字段
+      next = idx.list
+        .map((i) => ({ name: i.file === icon.file ? name : (i.name || i.file), file: i.file }))
+        .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
+      await writeIndex(next, idx.sha);
+    });
+    clearCache();
+    icons = next;
+    writeCache(next);
+    renderGrid();
+    showToast('✓ 已重命名');
+  } catch (e) {
+    showToast(ghMessage(e, '重命名失败'), 'err');
+  } finally {
+    hideLoading();
+  }
+}
+
 // ---------- 设置弹窗 ----------
 function openSettings() {
   const c = config || {};
@@ -635,10 +734,12 @@ function openSettings() {
   $('cfgBranch').value = c.branch || 'main';
   $('cfgDir').value = c.dir || 'icons';
   $('cfgToken').value = c.token || '';
+  $('cfgToken').type = 'password';
+  $('toggleToken').textContent = '显示';
   openModal('settingsModal');
 }
 
-function saveSettings() {
+async function saveSettings() {
   const c = {
     owner: $('cfgOwner').value.trim(),
     repo: $('cfgRepo').value.trim(),
@@ -650,14 +751,45 @@ function saveSettings() {
     showToast('请填写用户名、仓库和 Token', 'err');
     return;
   }
+
+  const prev = config;
   config = c;
+  try {
+    showLoading('正在校验仓库…');
+    await checkConnection();
+    hideLoading();
+  } catch (e) {
+    hideLoading();
+    // 仓库/分支写错或 Token 无效 → 拦下来，避免存一份用不了的配置
+    // 网络或限流等临时性问题 → 放行，但明确告知
+    if (e.status === 401 || e.status === 403 || e.status === 404) {
+      config = prev;
+      updateRepoLink();
+      showToast(ghMessage(e, '配置校验失败'), 'err');
+      return;
+    }
+    showToast('已保存，但仓库校验未通过：' + ghMessage(e, '连接失败'), 'err');
+  }
+
   localStorage.setItem(CONFIG_KEY, JSON.stringify(c));
   closeModal('settingsModal');
   clearCache();
   cacheBust = Date.now();
   updateRepoLink();
   loadIcons({ force: true });
-  showToast('✓ 配置已保存');
+  if (!$('toast').classList.contains('show')) showToast('✓ 配置已保存');
+}
+
+function clearSettings() {
+  try { localStorage.removeItem(CONFIG_KEY); } catch { /* ignore */ }
+  clearCache();
+  config = null;
+  icons = [];
+  cacheBust = Date.now();
+  closeModals();
+  updateRepoLink();
+  renderGrid();
+  showToast('✓ 本机配置已清除');
 }
 
 // ---------- 弹窗通用 ----------
@@ -753,14 +885,43 @@ function bindEvents() {
 
   // 设置
   $('settingsBtn').addEventListener('click', openSettings);
-  $('saveSettings').addEventListener('click', saveSettings);
+  $('saveSettings').addEventListener('click', () => { saveSettings(); });
   $('cancelSettings').addEventListener('click', () => closeModal('settingsModal'));
+  $('clearSettings').addEventListener('click', clearSettings);
+  $('toggleToken').addEventListener('click', () => {
+    const el = $('cfgToken');
+    const toText = el.type === 'password';
+    el.type = toText ? 'text' : 'password';
+    $('toggleToken').textContent = toText ? '隐藏' : '显示';
+  });
 
   // 删除确认
   $('confirmDelete').addEventListener('click', doDelete);
   $('cancelDelete').addEventListener('click', () => {
     pendingDelete = null;
     closeModal('confirmModal');
+  });
+
+  // 重命名确认
+  $('confirmRename').addEventListener('click', doRename);
+  $('cancelRename').addEventListener('click', () => {
+    pendingRename = null;
+    closeModal('renameModal');
+  });
+  $('renameInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doRename();
+  });
+
+  // 刷新 / 导出
+  $('refreshBtn').addEventListener('click', async () => {
+    if (!requireConfig()) return;
+    cacheBust = Date.now();
+    await loadIcons({ force: true });
+    showToast('✓ 已刷新');
+  });
+  $('exportBtn').addEventListener('click', () => {
+    if (!requireConfig()) return;
+    exportUrls();
   });
 
   // 搜索
