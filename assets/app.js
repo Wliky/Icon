@@ -44,6 +44,7 @@ let pinyinLoader = null;
 let jszipLoader = null;
 let selectMode = false;
 let selected = new Set();
+let lastPickIdx = -1;
 let crop = null;
 
 // ---------- 小工具 ----------
@@ -63,8 +64,21 @@ function showToast(msg, type = 'ok') {
   showToast._t = setTimeout(() => t.classList.remove('show'), 2600);
 }
 
-function showLoading(text = '处理中…') {
+// ratio: 0~1 显示确定进度；传 null 显示来回滑动的不确定进度
+function showLoading(text = '处理中…', ratio = null) {
   $('loadingText').textContent = text;
+  const bar = $('loadingBar');
+  const pct = $('loadingPct');
+  if (ratio == null) {
+    bar.style.width = '';
+    bar.classList.add('indet');
+    pct.textContent = '';
+  } else {
+    const p = Math.round(Math.min(1, Math.max(0, ratio)) * 100);
+    bar.classList.remove('indet');
+    bar.style.width = `${p}%`;
+    pct.textContent = `${p}%`;
+  }
   $('loading').classList.add('show');
 }
 function hideLoading() { $('loading').classList.remove('show'); }
@@ -582,8 +596,26 @@ function pruneSelection() {
 
 function setSelectMode(on) {
   selectMode = on;
+  lastPickIdx = -1;
   if (!on) selected.clear();
   renderAll();
+  if (on) showToast('点卡片即可选中，按住 Shift 连选');
+}
+
+// 勾选 / 取消勾选；shift 按下时从上一次点击的位置连选
+function togglePick(icon, shift) {
+  const list = filteredIcons();
+  const idx = list.findIndex((i) => i.file === icon.file);
+  if (shift && lastPickIdx >= 0 && idx >= 0) {
+    const [s, e] = idx >= lastPickIdx ? [lastPickIdx, idx] : [idx, lastPickIdx];
+    for (let k = s; k <= e; k++) selected.add(list[k].file);
+  } else {
+    if (selected.has(icon.file)) selected.delete(icon.file);
+    else selected.add(icon.file);
+    lastPickIdx = idx;
+  }
+  if (selectMode) renderAll();
+  else setSelectMode(true);
 }
 
 // ---------- 复制 ----------
@@ -703,6 +735,7 @@ async function uploadFiles(fileList) {
       }
     }
     if (added.length) {
+      showLoading('写入索引…', 0.98);
       await commitIndex(async (list) => list.concat(added), `feat: add ${added.length} icon(s)`);
     }
     if (failed.length) showToast(`${added.length ? `✓ 已上传 ${added.length} 个，` : ''}${failed.length} 个失败`, failed.length && !added.length ? 'err' : 'ok');
@@ -769,7 +802,7 @@ async function downloadZip(list) {
   const zip = new JSZip();
   let ok = 0;
   for (let i = 0; i < list.length; i++) {
-    showLoading(`打包 ${i + 1}/${list.length}`);
+    showLoading(`打包 ${i + 1}/${list.length}`, (i + 1) / (list.length + 1));
     try {
       const res = await fetch(withCacheBust(iconUrl(list[i])));
       if (!res.ok) throw new Error(String(res.status));
@@ -777,9 +810,10 @@ async function downloadZip(list) {
       ok++;
     } catch { /* 跳过失败项 */ }
   }
-  hideLoading();
-  if (!ok) { showToast('打包失败，图片全部无法下载', 'err'); return; }
+  showLoading('生成压缩包…', 0.97);
+  if (!ok) { hideLoading(); showToast('打包失败，图片全部无法下载', 'err'); return; }
   const blob = await zip.generateAsync({ type: 'blob' });
+  hideLoading();
   saveBlob(blob, `icons-${ok}.zip`);
   showToast(`✓ 已打包 ${ok} 个图标`);
 }
@@ -948,12 +982,12 @@ function askDeleteSelected() {
 
 async function deleteSelected(list) {
   closeModal('confirmModal');
-  showLoading(`删除 1/${list.length}`);
+  showLoading(`删除 1/${list.length}`, 0.03);
   const removed = new Set();
   const failed = [];
   try {
     for (let i = 0; i < list.length; i++) {
-      showLoading(`删除 ${i + 1}/${list.length}`);
+      showLoading(`删除 ${i + 1}/${list.length}`, (i + 1) / (list.length + 1));
       const icon = list[i];
       try {
         const f = await getFile(`${config.dir}/${icon.file}`);
@@ -965,6 +999,7 @@ async function deleteSelected(list) {
     }
     // 索引只提交一次：删 N 个图标也只写一遍 icons.json
     if (removed.size) {
+      showLoading('写入索引…', 0.98);
       await commitIndex(
         async (l) => l.filter((i) => !removed.has(i.file)),
         `feat: remove ${removed.size} icon(s)`
@@ -1236,12 +1271,8 @@ function bindEvents() {
     const act = e.target.closest('[data-act]');
     if (!act) return;
     const a = act.dataset.act;
-    if (a === 'pick') {
-      if (!selectMode) setSelectMode(true);
-      if (selected.has(icon.file)) selected.delete(icon.file);
-      else selected.add(icon.file);
-      renderAll();
-    } else if (a === 'preview') openPreview(icon);
+    if (a === 'pick') { togglePick(icon, e.shiftKey); return; }
+    if (a === 'preview') openPreview(icon);
     else if (a === 'crop') openCrop(icon);
     else if (a === 'rename') askRename(icon);
     else if (a === 'delete') askDelete(icon);

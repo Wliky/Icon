@@ -568,13 +568,45 @@ code {
 .loading-card {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 14px 20px;
-  border-radius: 12px;
+  gap: 12px;
+  min-width: 260px;
+  max-width: calc(100vw - 48px);
+  padding: 16px 20px;
+  border-radius: 14px;
   background: var(--surface);
   border: 1px solid var(--border);
   box-shadow: var(--shadow);
   font-size: 14px;
+}
+.loading-body { display: flex; flex-direction: column; gap: 9px; flex: 1; min-width: 0; }
+.loading-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.loading-row > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.loading-pct {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+}
+
+.progress {
+  height: 4px;
+  width: 100%;
+  border-radius: 999px;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.progress-bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 45%, #a855f7));
+  transition: width .22s ease;
+}
+.progress-bar.indet { width: 34%; animation: slide 1.15s ease-in-out infinite; }
+@keyframes slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(340%); }
 }
 .spinner {
   width: 16px; height: 16px;
@@ -594,9 +626,25 @@ code {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  opacity: .82;
+  transition: opacity .16s;
 }
 .ico.fill { fill: currentColor; stroke: none; }
 .ico.spin { animation: spin .8s linear infinite; transform-origin: center; }
+
+/* 图标默认半透明，指针悬停 / 聚焦时变实 */
+.icon-btn .ico { opacity: .68; }
+.icon-btn:hover .ico, .icon-btn:focus-visible .ico { opacity: 1; }
+.btn .ico { opacity: .78; }
+.btn:hover .ico, .btn:focus-visible .ico { opacity: 1; }
+.tile-act button .ico { opacity: .5; }
+.tile-act button:hover .ico, .tile-act button:focus-visible .ico { opacity: 1; }
+.menu button .ico { opacity: .75; }
+.menu button:hover .ico { opacity: 1; }
+.tile-check .ico { opacity: 0; transition: opacity .16s; }
+.tile-check:hover .ico { opacity: .5; }
+.tile.sel .tile-check .ico { opacity: 1; }
+.sec-title .ico { opacity: 1; }
 
 /* 批量选择模式 */
 .grid.picking .tile-check { opacity: 1; }
@@ -760,4 +808,6 @@ body.has-bg .card { background: color-mix(in srgb, var(--surface) 92%, transpare
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  /* 关掉动画后不确定进度条会滑出轨道，这里改成静态整条 */
+  .progress-bar.indet { width: 100%; opacity: .35; animation: none !important; }
 }
