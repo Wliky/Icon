@@ -161,7 +161,7 @@ function applyTheme(t = readTheme()) {
     b.setAttribute('aria-checked', String(b.dataset.theme === t));
   });
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', t === 'dark' ? '#0e1014' : '#f5f6f8');
+  if (meta) meta.setAttribute('content', t === 'dark' ? '#0d0f13' : '#f4f5f7');
 }
 
 function setTheme(t) {
@@ -180,16 +180,22 @@ function toggleThemeMenu(force) {
 function closeThemeMenu() { toggleThemeMenu(false); }
 
 // ---------- 页面背景 ----------
+const BG_DEFAULT = { url: '', dim: 60, veil: 'dark', blur: 0 };
+
 function readBg() {
-  try { return JSON.parse(localStorage.getItem(BG_KEY)) || { url: '', dim: 60 }; }
-  catch { return { url: '', dim: 60 }; }
+  try { return { ...BG_DEFAULT, ...(JSON.parse(localStorage.getItem(BG_KEY)) || {}) }; }
+  catch { return { ...BG_DEFAULT }; }
 }
 
 function applyBg(bg = readBg()) {
   const url = String((bg && bg.url) || '').trim();
   const dim = Math.min(90, Math.max(0, Number(bg && bg.dim) || 0));
+  const veil = bg && bg.veil === 'light' ? 'light' : 'dark';
+  const blur = Math.min(20, Math.max(0, Number(bg && bg.blur) || 0));
   $('bgLayer').style.backgroundImage = url ? `url("${url.replace(/["'\\]/g, '')}")` : 'none';
   $('bgDim').style.opacity = url ? String(dim / 100) : '1';
+  document.documentElement.style.setProperty('--bg-veil', veil === 'dark' ? '#101319' : '');
+  $('bgLayer').style.filter = url && blur ? `blur(${blur}px)` : '';
   document.body.classList.toggle('has-bg', !!url);
 }
 
@@ -510,6 +516,8 @@ function iconsetUrl() {
 function renderSub() {
   const ready = isConfigReady();
   $('subCount').textContent = `${icons.length} 个图标`;
+  const stat = $('statCount');
+  if (stat) stat.textContent = String(icons.length);
   $('subUrl').value = ready ? iconsetUrl() : '';
   $('copySubBtn').disabled = !ready;
   document.querySelectorAll('#cdnSeg .seg-btn').forEach((b) => {
@@ -1115,6 +1123,11 @@ function openSettings() {
   $('cfgBgUrl').value = bg.url || '';
   $('cfgBgDim').value = String(bg.dim ?? 60);
   $('cfgBgDimVal').textContent = `${bg.dim ?? 60}%`;
+  $('cfgBgBlur').value = String(bg.blur ?? 0);
+  $('cfgBgBlurVal').textContent = `${bg.blur ?? 0}px`;
+  const v = bg.veil === 'light' ? 'light' : 'dark';
+  document.querySelectorAll('#cfgBgVeil .seg-btn')
+    .forEach((b) => b.classList.toggle('on', b.dataset.veil === v));
 
   resetPwdToggles();
   openModal('settingsModal');
@@ -1122,9 +1135,12 @@ function openSettings() {
 }
 
 function readBgForm() {
+  const veilBtn = document.querySelector('#cfgBgVeil .seg-btn.on');
   return {
     url: $('cfgBgUrl').value.trim(),
-    dim: Number($('cfgBgDim').value) || 0
+    dim: Number($('cfgBgDim').value) || 0,
+    veil: veilBtn ? veilBtn.dataset.veil : 'dark',
+    blur: Number($('cfgBgBlur').value) || 0
   };
 }
 
@@ -1302,13 +1318,23 @@ function bindEvents() {
     $('cfgBgDimVal').textContent = `${$('cfgBgDim').value}%`;
     bgLive();
   });
+  $('cfgBgBlur').addEventListener('input', () => {
+    $('cfgBgBlurVal').textContent = `${$('cfgBgBlur').value}px`;
+    bgLive();
+  });
+  $('cfgBgVeil').addEventListener('click', (e) => {
+    const btn = e.target.closest('.seg-btn');
+    if (!btn) return;
+    document.querySelectorAll('#cfgBgVeil .seg-btn').forEach((x) => x.classList.toggle('on', x === btn));
+    bgLive();
+  });
   $('bgApplyBtn').addEventListener('click', () => {
     saveBg(readBgForm());
     showToast('✓ 背景已应用');
   });
   $('bgClearBtn').addEventListener('click', () => {
     $('cfgBgUrl').value = '';
-    saveBg({ url: '', dim: 60 });
+    saveBg({ ...readBgForm(), url: '' });
     showToast('✓ 已清除背景');
   });
 
@@ -1371,6 +1397,12 @@ function bindEvents() {
     applyCrop();
   });
 
+  // 网格密度
+  $('densitySeg').addEventListener('click', (e) => {
+    const b = e.target.closest('.seg-btn');
+    if (b) setDensity(b.dataset.density);
+  });
+
   // 通用：关闭按钮 / 点遮罩关闭 / Esc
   document.querySelectorAll('[data-close]').forEach((el) =>
     el.addEventListener('click', () => closeModal(el.closest('.modal').id))
@@ -1391,11 +1423,47 @@ function bindEvents() {
   );
 }
 
+// ---------- 网格密度（大 / 中 / 小） ----------
+const DENSITY_KEY = 'icon_density';
+
+function setDensity(d) {
+  const v = ['l', 'm', 's'].includes(d) ? d : 'm';
+  $('iconGrid').dataset.density = v;
+  document.querySelectorAll('#densitySeg .seg-btn')
+    .forEach((b) => b.classList.toggle('on', b.dataset.density === v));
+  try { localStorage.setItem(DENSITY_KEY, v); } catch { /* ignore */ }
+}
+
+function readDensity() {
+  try { return localStorage.getItem(DENSITY_KEY) || 'm'; } catch { return 'm'; }
+}
+
+// ---------- 侧边导航 ----------
+function initNav() {
+  document.querySelectorAll('.nav-item').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const nav = btn.dataset.nav;
+      if (nav === 'set') return; // 设置项沿用 settingsBtn 自己的逻辑
+      document.querySelectorAll('.nav-item')
+        .forEach((x) => x.classList.toggle('on', x === btn));
+      if (nav === 'sub') {
+        $('pageTitle').textContent = '订阅地址';
+        $('subCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } else {
+        $('pageTitle').textContent = '图标库';
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  });
+}
+
 // ---------- 初始化 ----------
 function init() {
   applyTheme();
   applyBg();
+  setDensity(readDensity());
   bindEvents();
+  initNav();
   updateRepoLink();
   renderAll();
   if (isConfigReady()) loadIcons();
