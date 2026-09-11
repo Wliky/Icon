@@ -25,8 +25,8 @@ const DEFAULT_REPO = 'Icon';
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const PINYIN_CDN = 'https://cdn.jsdelivr.net/npm/pinyin-pro@3/dist/index.min.js';
 const JSZIP_CDN = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
-const LIB_NAME = 'Icon';
-const RENDER_STEP = 120;
+const LIB_NAME = 'Wliky';
+const ROWS_PER_PAGE = 4; // 每页展示 4 行，超出的部分用「显示更多」逐页展开
 
 // ---------- 状态 ----------
 let config = migrateConfig() || readConfig();
@@ -34,7 +34,7 @@ let icons = [];
 let cdnKind = 'jsdelivr';
 let unlocked = false;
 let cacheBust = 0;
-let renderLimit = RENDER_STEP;
+let renderedRows = 0; // 当前已渲染行数，0 表示按每页行数初始化
 let pendingRename = null;
 let confirmHandler = null;
 let previewIcon = null;
@@ -441,6 +441,7 @@ async function loadIcons({ force = false } = {}) {
     const cached = readCache();
     if (cached) { icons = cached; renderAll(); return; }
   }
+  renderedRows = ROWS_PER_PAGE; // 重新拉数据后回到首屏
   try {
     const { list } = await readIndex();
     icons = sortList(list);
@@ -513,35 +514,66 @@ function tileHtml(icon) {
   </article>`;
 }
 
+// 首帧还不知道列数时，用网格宽度粗估一下，避免一次渲染上千个卡片。
+function guessCols(grid) {
+  const w = grid.clientWidth;
+  if (!w) return 4;
+  const min = parseFloat(getComputedStyle(grid).gridTemplateColumns.split(' ')[0]) || 152;
+  return Math.max(1, Math.floor((w + 14) / (min + 14)));
+}
+
 function renderGrid() {
   const grid = $('iconGrid');
   const list = filteredIcons();
   const q = $('searchInput').value.trim();
 
-  renderLimit = Math.max(RENDER_STEP, renderLimit);
-  const slice = list.slice(0, renderLimit);
-  grid.innerHTML = slice.map(tileHtml).join('');
-  grid.classList.toggle('picking', selectMode);
+  // 先按默认行数渲染首屏，测出实际列数后再决定是否要「显示更多」。
+  // 列数由 CSS 的 auto-fill 决定，所以只能渲染后量出来。
+  const targetRows = renderedRows || ROWS_PER_PAGE;
+  let slice = list.slice(0, targetRows * guessCols(grid));
+
+  const paint = (arr) => {
+    grid.innerHTML = arr.map(tileHtml).join('');
+    grid.classList.toggle('picking', selectMode);
+    grid.querySelectorAll('img').forEach((img) => {
+      img.onerror = () => {
+        img.replaceWith(Object.assign(document.createElement('span'), { textContent: '⚠️', title: '图片加载失败' }));
+      };
+    });
+  };
+
+  paint(slice);
 
   $('empty').hidden = icons.length > 0 || !isConfigReady();
   $('noResult').hidden = !(icons.length > 0 && list.length === 0);
   $('noResultKey').textContent = q;
 
-  // 只在图标超过 4 行时才出现「显示更多」
   requestAnimationFrame(() => {
-    const first = grid.querySelector('.tile');
-    if (!first) { $('loadMore').hidden = true; return; }
-    const tileH = first.getBoundingClientRect().height;
+    const tiles = grid.querySelectorAll('.tile');
+    if (!tiles.length) {
+      $('loadMore').hidden = true;
+      return;
+    }
+    const tileH = tiles[0].getBoundingClientRect().height;
     const gap = parseFloat(getComputedStyle(grid).rowGap) || 0;
-    if (!tileH) { $('loadMore').hidden = list.length <= slice.length; return; }
-    const fourRows = tileH * 4 + gap * 3;
-    $('loadMore').hidden = grid.scrollHeight <= fourRows + 2;
-  });
+    const cols = Math.max(1, Math.round((grid.clientWidth + gap) / (tiles[0].getBoundingClientRect().width + gap)));
+    const want = targetRows * cols;
 
-  grid.querySelectorAll('img').forEach((img) => {
-    img.onerror = () => {
-      img.replaceWith(Object.assign(document.createElement('span'), { textContent: '⚠️', title: '图片加载失败' }));
-    };
+    // 列数和我们估算的不一致（首次渲染、窗口缩放），按真实列数重画一次
+    if (want !== slice.length || renderedRows === 0) {
+      renderedRows = targetRows;
+      slice = list.slice(0, want);
+      paint(slice);
+    }
+
+    if (!tileH) {
+      $('loadMore').hidden = list.length <= slice.length;
+      return;
+    }
+    const pageRows = ROWS_PER_PAGE;
+    const pageH = tileH * pageRows + gap * (pageRows - 1);
+    // 还有下一屏内容才显示按钮
+    $('loadMore').hidden = grid.scrollHeight <= pageH + 2 && list.length <= slice.length;
   });
 }
 
@@ -1034,7 +1066,7 @@ function bindEvents() {
   let searchTimer = null;
   $('searchInput').addEventListener('input', () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { renderLimit = RENDER_STEP; renderGrid(); }, 140);
+    searchTimer = setTimeout(() => { renderedRows = ROWS_PER_PAGE; renderGrid(); }, 140);
   });
 
   // 上传
@@ -1088,7 +1120,8 @@ function bindEvents() {
   });
 
   $('loadMore').addEventListener('click', () => {
-    renderLimit += RENDER_STEP;
+    // 每次再多给 4 行，以此类推
+    renderedRows = (renderedRows || ROWS_PER_PAGE) + ROWS_PER_PAGE;
     renderGrid();
   });
 
@@ -1134,6 +1167,13 @@ function bindEvents() {
       btn.textContent = show ? '隐藏' : '显示';
     })
   );
+
+  // 窗口尺寸变了列数就变，重算当前该展示几行（保留用户已展开的屏数）
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderGrid, 160);
+  });
 }
 
 // ---------- 初始化 ----------
