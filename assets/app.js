@@ -165,12 +165,29 @@ async function checkConnection() {
 // 获取文件 { sha, content(base64) }，不存在返回 null
 async function getFile(path) {
   try {
-    const res = await ghRequest(`/repos/${ghPath(`${config.owner}/${config.repo}`)}/contents/${ghPath(path)}?ref=${encodeURIComponent(config.branch)}`);
+    // 追加时间戳参数穿透缓存：Contents API 在提交后短时间内可能返回旧版本
+    const bust = `&_=${Date.now()}`;
+    const res = await ghRequest(`/repos/${ghPath(`${config.owner}/${config.repo}`)}/contents/${ghPath(path)}?ref=${encodeURIComponent(config.branch)}${bust}`);
     const data = await res.json();
     return { sha: data.sha, content: data.content ? data.content.replace(/\n/g, '') : '' };
   } catch (e) {
     if (e.status === 404) return null;
     throw e;
+  }
+}
+
+// 写操作冲突重试：提交后立即再读写可能拿到过期 SHA（409），重取再试
+async function withRetryOnConflict(fn, attempts = 3) {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (e.status === 409 && i < attempts - 1) {
+        await new Promise((r) => setTimeout(r, 1000));
+        continue;
+      }
+      throw e;
+    }
   }
 }
 
@@ -332,16 +349,27 @@ async function copyUrl(url) {
 }
 
 // ---------- 命名：name → slug → filename ----------
+// pinyin-pro UMD 全局名为 pinyinPro，pinyin 函数在其属性上
+function getPinyinFn() {
+  const ns = window.pinyinPro;
+  if (ns && typeof ns.pinyin === 'function') return ns.pinyin;
+  if (typeof window.pinyin === 'function') return window.pinyin;
+  return null;
+}
+
 function ensurePinyin() {
-  if (window.pinyin) return Promise.resolve(window.pinyin);
+  const fn = getPinyinFn();
+  if (fn) return Promise.resolve(fn);
   if (!pinyinLoader) {
     pinyinLoader = new Promise((resolve) => {
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(getPinyinFn()); } };
       const s = document.createElement('script');
       s.src = PINYIN_CDN;
-      s.onload = () => resolve(window.pinyin || null);
-      s.onerror = () => resolve(null);
+      s.onload = finish;
+      s.onerror = () => { done = true; resolve(null); };
       document.head.appendChild(s);
-      setTimeout(() => resolve(window.pinyin || null), 5000);
+      setTimeout(finish, 5000);
     });
   }
   return pinyinLoader;
@@ -526,19 +554,28 @@ async function saveIcon() {
     const file = await makeUniqueName(name, existing);
 
     // 1. 上传 PNG（已存在则覆盖）
-    const existed = await getFile(`${config.dir}/${file}`);
-    await putFile(`${config.dir}/${file}`, `feat: add icon ${file}`, content, existed && existed.sha);
+    await withRetryOnConflict(async () => {
+      const existed = await getFile(`${config.dir}/${file}`);
+      await putFile(`${config.dir}/${file}`, `feat: add icon ${file}`, content, existed && existed.sha);
+    });
 
     // 2. 更新 icons.json 索引
-    const { sha, list } = await readIndex();
-    list.push({ name: name || file.replace(/\.png$/, ''), file, url: rawUrl(file) });
-    list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
-    await writeIndex(list, sha);
+    let list;
+    await withRetryOnConflict(async () => {
+      const idx = await readIndex();
+      list = idx.list;
+      list.push({ name: name || file.replace(/\.png$/, ''), file, url: rawUrl(file) });
+      list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
+      await writeIndex(list, idx.sha);
+    });
 
+    // 3. 以本地写入结果为准刷新界面（Contents API 提交后存在短暂缓存，回读可能拿到旧数据）
     clearCache();
     cacheBust = Date.now();
+    icons = list;
+    writeCache(list);
     closeEditor();
-    await loadIcons({ force: true });
+    renderGrid();
     showToast('✓ 已保存到 GitHub');
   } catch (e) {
     showToast(ghMessage(e, '保存失败'), 'err');
@@ -563,17 +600,25 @@ async function doDelete() {
   try {
     showLoading('正在删除图标…');
     // 1. 获取 PNG 的 SHA 并删除
-    const f = await getFile(`${config.dir}/${icon.file}`);
-    if (f) {
-      await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
-    }
-    // 2. 更新 icons.json
-    const { sha, list } = await readIndex();
-    await writeIndex(list.filter((i) => i.file !== icon.file), sha);
+    await withRetryOnConflict(async () => {
+      const f = await getFile(`${config.dir}/${icon.file}`);
+      if (f) {
+        await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
+      }
+    });
+    // 2. 更新 icons.json，并以本地结果刷新界面（规避 Contents API 提交后的短暂缓存）
+    let next;
+    await withRetryOnConflict(async () => {
+      const idx = await readIndex();
+      next = idx.list.filter((i) => i.file !== icon.file);
+      await writeIndex(next, idx.sha);
+    });
 
     clearCache();
     cacheBust = Date.now();
-    await loadIcons({ force: true });
+    icons = next;
+    writeCache(next);
+    renderGrid();
     showToast('✓ 已删除');
   } catch (e) {
     showToast(ghMessage(e, '删除失败'), 'err');
