@@ -22,7 +22,7 @@ let config = readConfig();
 let icons = [];
 let editor = null;        // { img, w, h, x, y, zoom, opacity, shape }
 let currentFile = null;   // 当前编辑图片的 ObjectURL
-let pendingDelete = null;
+let confirmHandler = null;    // 确认弹窗回调
 let pendingRename = null;
 let cacheBust = 0;        // 上传/删除后刷新缩略图缓存
 let pinyinLoader = null;
@@ -61,6 +61,162 @@ function updateRepoLink() {
   } else {
     a.hidden = true;
   }
+}
+
+// ---------- 主题：跟随系统 / 浅色 / 深色 ----------
+const THEME_KEY = 'eis_theme'; // 'system' | 'light' | 'dark'
+const THEME_ORDER = ['system', 'light', 'dark'];
+const THEME_META = {
+  system: { icon: '🌓', label: '跟随系统' },
+  light: { icon: '☀️', label: '浅色' },
+  dark: { icon: '🌙', label: '深色' }
+};
+
+function readTheme() {
+  try { return localStorage.getItem(THEME_KEY) || 'system'; }
+  catch { return 'system'; }
+}
+
+function applyTheme(t = readTheme()) {
+  const root = document.documentElement;
+  if (t === 'system') root.removeAttribute('data-theme');
+  else root.setAttribute('data-theme', t);
+
+  const meta = THEME_META[t] || THEME_META.system;
+  const btn = $('themeBtn');
+  if (btn) {
+    btn.textContent = meta.icon;
+    btn.title = `主题：${meta.label}（点击切换）`;
+    btn.setAttribute('aria-label', `主题：${meta.label}`);
+  }
+  // 移动端浏览器地址栏配色跟随当前主题
+  requestAnimationFrame(() => {
+    const c = getComputedStyle(document.documentElement).getPropertyValue('--page-bg').trim();
+    const m = document.querySelector('meta[name="theme-color"]');
+    if (c && m) m.setAttribute('content', c);
+  });
+}
+
+function cycleTheme() {
+  const cur = readTheme();
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(cur) + 1) % THEME_ORDER.length];
+  try { localStorage.setItem(THEME_KEY, next); } catch { /* ignore */ }
+  applyTheme(next);
+  showToast(`✓ 主题：${THEME_META[next].label}`);
+}
+
+// ---------- «GitHub 设置» 访问密码 ----------
+// 密码只以 salt+hash 形式存本机，页面刷新后需重新验证
+const PWD_KEY = 'eis_settings_pwd';
+let unlocked = false;
+
+function cryptoReady() {
+  return !!(window.crypto && window.crypto.subtle && window.crypto.getRandomValues);
+}
+
+async function sha256(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function randomSalt() {
+  const a = new Uint8Array(16);
+  crypto.getRandomValues(a);
+  return [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+function readPwd() {
+  try { return JSON.parse(localStorage.getItem(PWD_KEY)); }
+  catch { return null; }
+}
+
+function hasPassword() {
+  const p = readPwd();
+  return !!(p && p.salt && p.hash);
+}
+
+async function verifyPwd(pwd) {
+  const p = readPwd();
+  if (!p) return false;
+  return (await sha256(p.salt + pwd)) === p.hash;
+}
+
+// 点击「GitHub 设置」的统一入口：未设密码 → 先设；已设 → 先验
+function requestSettingsAccess() {
+  // 非安全上下文（如 file://）没有 Web Crypto，无法安全存储哈希，直接放行
+  if (!cryptoReady()) { openSettings(); return; }
+  if (!hasPassword()) { openPwdSetup(); return; }
+  if (unlocked) { openSettings(); return; }
+  openPwdVerify();
+}
+
+function resetPwdToggles() {
+  document.querySelectorAll('[data-toggle-pwd]').forEach((btn) => {
+    const el = $(btn.getAttribute('data-toggle-pwd'));
+    if (!el) return;
+    el.type = 'password';
+    btn.textContent = '显示';
+  });
+}
+
+function openPwdSetup() {
+  $('newPwd').value = '';
+  $('confirmPwd').value = '';
+  resetPwdToggles();
+  openModal('lockSetupModal');
+  setTimeout(() => $('newPwd').focus(), 0);
+}
+
+async function doPwdSetup() {
+  const a = $('newPwd').value;
+  const b = $('confirmPwd').value;
+  if (a.length < 4) { showToast('密码至少 4 位', 'err'); return; }
+  if (a !== b) { showToast('两次输入的密码不一致', 'err'); return; }
+  const salt = randomSalt();
+  const hash = await sha256(salt + a);
+  try { localStorage.setItem(PWD_KEY, JSON.stringify({ salt, hash })); }
+  catch { showToast('无法保存密码设置', 'err'); return; }
+  unlocked = true;
+  closeModal('lockSetupModal');
+  showToast('✓ 访问密码已设置');
+  openSettings();
+}
+
+function openPwdVerify() {
+  $('authPwd').value = '';
+  $('authErr').hidden = true;
+  resetPwdToggles();
+  openModal('lockVerifyModal');
+  setTimeout(() => $('authPwd').focus(), 0);
+}
+
+async function doPwdVerify() {
+  const ok = await verifyPwd($('authPwd').value);
+  if (!ok) {
+    $('authErr').hidden = false;
+    $('authPwd').select();
+    return;
+  }
+  unlocked = true;
+  closeModal('lockVerifyModal');
+  openSettings();
+}
+
+// 忘记密码：哈希不可逆，只能重置本机数据
+function forgetPassword() {
+  try {
+    localStorage.removeItem(PWD_KEY);
+    localStorage.removeItem(CONFIG_KEY);
+  } catch { /* ignore */ }
+  clearCache();
+  unlocked = false;
+  config = null;
+  icons = [];
+  cacheBust = Date.now();
+  closeModals();
+  updateRepoLink();
+  renderGrid();
+  showToast('✓ 本机数据已重置，请重新配置');
 }
 
 // ---------- 通用提示 ----------
@@ -636,18 +792,19 @@ async function saveIcon() {
   }
 }
 
-// ---------- 删除图标 ----------
-function askDelete(icon) {
-  pendingDelete = icon;
-  $('confirmText').textContent = `确定删除「${icon.name || icon.file}」？`;
+// ---------- 通用确认弹窗 ----------
+function askConfirm(text, onOk) {
+  $('confirmText').textContent = text;
+  confirmHandler = onOk;
   openModal('confirmModal');
 }
 
-async function doDelete() {
-  if (!pendingDelete) return;
-  const icon = pendingDelete;
-  pendingDelete = null;
-  closeModals();
+// ---------- 删除图标 ----------
+function askDelete(icon) {
+  askConfirm(`确定删除「${icon.name || icon.file}」？此操作会同时删除仓库中的 PNG。`, () => doDelete(icon));
+}
+
+async function doDelete(icon) {
   if (!requireConfig()) return;
   try {
     showLoading('正在删除图标…');
@@ -734,8 +891,7 @@ function openSettings() {
   $('cfgBranch').value = c.branch || 'main';
   $('cfgDir').value = c.dir || 'icons';
   $('cfgToken').value = c.token || '';
-  $('cfgToken').type = 'password';
-  $('toggleToken').textContent = '显示';
+  resetPwdToggles();
   openModal('settingsModal');
 }
 
@@ -883,22 +1039,50 @@ function bindEvents() {
   $('generateBtn').addEventListener('click', saveIcon);
   $('editorClose').addEventListener('click', closeEditor);
 
-  // 设置
-  $('settingsBtn').addEventListener('click', openSettings);
+  // 设置（受访问密码保护）
+  $('settingsBtn').addEventListener('click', requestSettingsAccess);
   $('saveSettings').addEventListener('click', () => { saveSettings(); });
   $('cancelSettings').addEventListener('click', () => closeModal('settingsModal'));
   $('clearSettings').addEventListener('click', clearSettings);
-  $('toggleToken').addEventListener('click', () => {
-    const el = $('cfgToken');
-    const toText = el.type === 'password';
-    el.type = toText ? 'text' : 'password';
-    $('toggleToken').textContent = toText ? '隐藏' : '显示';
+
+  // 密码显隐：所有 data-toggle-pwd 按钮共用一套逻辑
+  document.querySelectorAll('[data-toggle-pwd]').forEach((btn) =>
+    btn.addEventListener('click', () => {
+      const el = $(btn.getAttribute('data-toggle-pwd'));
+      if (!el) return;
+      const toText = el.type === 'password';
+      el.type = toText ? 'text' : 'password';
+      btn.textContent = toText ? '隐藏' : '显示';
+    })
+  );
+
+  // 访问密码：设置 / 验证 / 忘记
+  $('confirmPwdSetup').addEventListener('click', () => { doPwdSetup(); });
+  $('cancelPwdSetup').addEventListener('click', () => closeModal('lockSetupModal'));
+  $('newPwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('confirmPwd').focus(); });
+  $('confirmPwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') doPwdSetup(); });
+
+  $('confirmAuth').addEventListener('click', () => { doPwdVerify(); });
+  $('cancelAuth').addEventListener('click', () => closeModal('lockVerifyModal'));
+  $('authPwd').addEventListener('keydown', (e) => { if (e.key === 'Enter') doPwdVerify(); });
+  $('authPwd').addEventListener('input', () => { $('authErr').hidden = true; });
+  $('forgetPwd').addEventListener('click', () => {
+    closeModal('lockVerifyModal');
+    askConfirm('密码无法找回，重置将清除本机的访问密码与 GitHub 配置（仓库中的图标不受影响）。确定继续？', forgetPassword);
   });
 
-  // 删除确认
-  $('confirmDelete').addEventListener('click', doDelete);
+  // 主题
+  $('themeBtn').addEventListener('click', cycleTheme);
+
+  // 确认弹窗
+  $('confirmDelete').addEventListener('click', () => {
+    const fn = confirmHandler;
+    confirmHandler = null;
+    closeModals();
+    if (fn) fn();
+  });
   $('cancelDelete').addEventListener('click', () => {
-    pendingDelete = null;
+    confirmHandler = null;
     closeModal('confirmModal');
   });
 
@@ -958,9 +1142,17 @@ function bindEvents() {
 
 // ---------- 初始化 ----------
 function init() {
+  applyTheme();
   updateRepoLink();
   bindEvents();
   loadIcons();
+
+  // 跟随系统时，系统主题切换后同步状态栏配色
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (readTheme() === 'system') applyTheme('system');
+    });
+  }
 }
 
 init();

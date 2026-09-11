@@ -18,6 +18,13 @@
 </head>
 <body>
 
+  <!-- 背景光斑（玻璃拟态的底层） -->
+  <div class="bg-decor" aria-hidden="true">
+    <span class="blob blob-1"></span>
+    <span class="blob blob-2"></span>
+    <span class="blob blob-3"></span>
+  </div>
+
   <!-- ===== 顶部导航 ===== -->
   <header class="topbar">
     <div class="topbar-inner">
@@ -33,10 +40,11 @@
           <span class="search-icon">🔍</span>
           <input id="searchInput" type="search" placeholder="搜索图标……" autocomplete="off">
         </div>
+        <button id="themeBtn" class="btn btn-ghost btn-icon" type="button" title="切换主题">🌓</button>
         <button id="refreshBtn" class="btn btn-ghost" type="button" title="从 GitHub 重新拉取图标索引">刷新</button>
         <button id="exportBtn" class="btn btn-ghost" type="button" title="导出全部图标 URL">导出</button>
         <a id="repoLink" class="btn btn-ghost" target="_blank" rel="noopener" hidden>GitHub</a>
-        <button id="settingsBtn" class="btn btn-ghost" type="button">GitHub 设置</button>
+        <button id="settingsBtn" class="btn btn-ghost" type="button">🔒 GitHub 设置</button>
       </div>
     </div>
   </header>
@@ -122,6 +130,62 @@
     </div>
   </div>
 
+  <!-- ===== 设置访问密码：首次设置 ===== -->
+  <div id="lockSetupModal" class="modal">
+    <div class="modal-dialog modal-dialog-sm">
+      <div class="modal-head">
+        <h3>设置访问密码</h3>
+        <button class="icon-btn" type="button" data-close="lockSetupModal" aria-label="关闭">✕</button>
+      </div>
+      <div class="form-body">
+        <p class="hint">给「GitHub 设置」加一道锁。密码只以哈希形式存在本机浏览器，不会上传到任何地方。</p>
+        <div class="control-group">
+          <label class="control-label" for="newPwd">新密码</label>
+          <div class="input-with-action">
+            <input id="newPwd" type="password" placeholder="至少 4 位" autocomplete="new-password">
+            <button class="input-action" type="button" data-toggle-pwd="newPwd">显示</button>
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="confirmPwd">确认密码</label>
+          <input id="confirmPwd" type="password" placeholder="再输入一次" autocomplete="new-password">
+        </div>
+        <div class="btn-row">
+          <button id="cancelPwdSetup" class="btn btn-ghost" type="button">取消</button>
+          <button id="confirmPwdSetup" class="btn btn-primary" type="button">设置并继续</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 设置访问密码：验证 ===== -->
+  <div id="lockVerifyModal" class="modal">
+    <div class="modal-dialog modal-dialog-sm">
+      <div class="modal-head">
+        <h3>需要密码</h3>
+        <button class="icon-btn" type="button" data-close="lockVerifyModal" aria-label="关闭">✕</button>
+      </div>
+      <div class="form-body">
+        <p class="hint">「GitHub 设置」受密码保护，验证后即可查看和修改已保存的信息。</p>
+        <div class="control-group">
+          <label class="control-label" for="authPwd">访问密码</label>
+          <div class="input-with-action">
+            <input id="authPwd" type="password" placeholder="输入访问密码" autocomplete="current-password">
+            <button class="input-action" type="button" data-toggle-pwd="authPwd">显示</button>
+          </div>
+        </div>
+        <p id="authErr" class="hint err-text" hidden>密码不正确</p>
+        <div class="btn-row">
+          <button id="cancelAuth" class="btn btn-ghost" type="button">取消</button>
+          <button id="confirmAuth" class="btn btn-primary" type="button">解锁</button>
+        </div>
+        <div class="btn-row">
+          <button id="forgetPwd" class="btn btn-danger" type="button">忘记密码？重置本机数据</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== GitHub 设置 ===== -->
   <div id="settingsModal" class="modal">
     <div class="modal-dialog">
@@ -152,7 +216,7 @@
           <label class="control-label" for="cfgToken">GitHub Token</label>
           <div class="input-with-action">
             <input id="cfgToken" type="password" placeholder="ghp_xxxxxxxx / github_pat_xxxxxxxx" autocomplete="off">
-            <button id="toggleToken" class="input-action" type="button" aria-label="显示 Token">显示</button>
+            <button class="input-action" type="button" data-toggle-pwd="cfgToken">显示</button>
           </div>
         </div>
         <p class="hint">
