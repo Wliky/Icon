@@ -695,6 +695,51 @@ input[type="range"] {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- 迁移弹窗：文本域 ---------- */
+textarea {
+  width: 100%;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  outline: none;
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+textarea::placeholder { color: var(--muted); opacity: 0.65; }
+
+/* ---------- 加载更多 ---------- */
+.load-more { display: flex; justify-content: center; margin-top: 20px; }
+
+/* ---------- 预设按钮行 / 复制行 ---------- */
+.preset-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.copy-row { display: flex; gap: 8px; }
+.copy-row input {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px;
+  outline: none;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.hint code {
+  background: var(--surface-sunken);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 11.5px;
+}
+
 /* ---------- 响应式 ---------- */
 
 /* 平板：编辑器收窄 */
@@ -729,6 +774,7 @@ input[type="range"] {
   .modal { padding: 12px; }
   .modal-dialog { max-height: calc(100vh - 24px); border-radius: 18px; }
   .toast { bottom: 20px; }
+  .copy-row { flex-direction: column; }
 }
 
 /* 小屏手机 */

@@ -25,6 +25,7 @@ let currentFile = null;   // 当前编辑图片的 ObjectURL
 let confirmHandler = null;    // 确认弹窗回调
 let pendingRename = null;
 let cacheBust = 0;        // 上传/删除后刷新缩略图缓存
+let renderLimit = 120;    // 图标太多时分批渲染，避免一次性建上千个节点
 let pinyinLoader = null;
 
 // ---------- DOM 工具 ----------
@@ -404,9 +405,45 @@ async function readIndex() {
   }
 }
 
-async function writeIndex(list, sha) {
-  const json = JSON.stringify(list, null, 2) + '\n';
-  return putFile('data/icons.json', 'chore: update icons.json', encodeUtf8(json), sha);
+async function putJson(path, obj, message, sha) {
+  return putFile(path, message, encodeUtf8(JSON.stringify(obj, null, 2) + '\n'), sha);
+}
+
+// ---------- 客户端图标库（Emby 客户端订阅用） ----------
+// 与主流 Emby 图标库（离歌等）一致的格式，Fileball / Senplayer / Yamby / Hills 可直接订阅
+//   { name, description, icons: [{ name, url }] }
+const ICONSET_PATH = 'data/iconset.json';
+
+function buildIconset(list) {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return {
+    name: 'Emby Icon Studio',
+    description: `共 ${list.length} 个图标 · 更新于 ${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+    icons: list.map((i) => ({
+      name: i.name || String(i.file).replace(/\.png$/, ''),
+      url: iconUrl(i)
+    }))
+  };
+}
+
+// 索引变更的统一出口：读 → 变换 → 写回（索引 + 客户端图标库）→ 刷新界面
+async function commitIndex(mutate, message) {
+  let next;
+  await withRetryOnConflict(async () => {
+    const idx = await readIndex();
+    next = await mutate(idx.list.slice());
+    next.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
+    await putJson('data/icons.json', next, message, idx.sha);
+    const set = await getFile(ICONSET_PATH);
+    await putJson(ICONSET_PATH, buildIconset(next), message, set && set.sha);
+  });
+  clearCache();
+  cacheBust = Date.now();
+  icons = next;
+  writeCache(next);
+  renderGrid();
+  return next;
 }
 
 // ---------- 缓存（5 分钟） ----------
@@ -462,17 +499,23 @@ function filteredIcons() {
   );
 }
 
-// 地址按「当前配置」实时拼出，不再依赖索引里存的绝对 url
+// 图标地址一律按「当前配置」实时拼出，不存绝对 URL
 // 这样更换仓库 / 分支 / 目录后，历史图标地址自动跟着生效
 function iconUrl(icon) {
-  if (isConfigReady()) return rawUrl(icon.file);
-  return icon.url || '';
+  return isConfigReady() ? rawUrl(icon.file) : '';
+}
+
+// 追加时间戳绕过 CDN 缓存（地址可能已带查询参数）
+function withCacheBust(url) {
+  if (!cacheBust) return url;
+  return url + (url.includes('?') ? '&' : '?') + `v=${cacheBust}`;
 }
 
 function renderGrid() {
   const grid = $('iconGrid');
   grid.innerHTML = '';
-  const list = filteredIcons();
+  const all = filteredIcons();
+  const list = all.slice(0, renderLimit);
   const q = $('searchInput').value.trim();
   const ready = isConfigReady();
 
@@ -483,23 +526,30 @@ function renderGrid() {
   const countEl = $('iconCount');
   if (ready && icons.length) {
     countEl.hidden = false;
-    countEl.textContent = q ? `${list.length} / ${icons.length}` : String(icons.length);
+    countEl.textContent = q ? `${all.length} / ${icons.length}` : String(icons.length);
   } else {
     countEl.hidden = true;
   }
 
   // 搜索无结果（区别于「一个图标都没有」）
-  const noHit = ready && icons.length > 0 && q.length > 0 && list.length === 0;
+  const noHit = ready && icons.length > 0 && q.length > 0 && all.length === 0;
   $('noResult').hidden = !noHit;
   if (noHit) $('noResultKey').textContent = q;
 
+  // 分批渲染：图标多时避免一次性建上千个节点
+  const rest = all.length - list.length;
+  $('loadMore').hidden = rest <= 0;
+  if (rest > 0) $('loadMoreBtn').textContent = `显示更多（还有 ${rest} 个）`;
+
   for (const icon of list) {
     const url = iconUrl(icon);
-    const src = url + (cacheBust ? `?v=${cacheBust}` : '');
+    const src = withCacheBust(url);
     const card = document.createElement('div');
     card.className = 'icon-card';
     card.innerHTML = `
-      <div class="thumb"><img loading="lazy" src="${escapeHtml(src)}" alt="${escapeHtml(icon.name || icon.file)}"></div>
+      <div class="thumb">
+        <img loading="lazy" src="${escapeHtml(src)}" alt="${escapeHtml(icon.name || icon.file)}">
+      </div>
       <div class="icon-name" title="${escapeHtml(icon.name || '')}">${escapeHtml(icon.name || icon.file)}</div>
       <div class="icon-actions">
         <button class="btn btn-ghost btn-small" data-act="copy" type="button">复制 URL</button>
@@ -508,6 +558,8 @@ function renderGrid() {
       <div class="icon-actions">
         <button class="btn btn-danger btn-small" data-act="delete" type="button">删除</button>
       </div>`;
+    const img = card.querySelector('img');
+    img.addEventListener('error', () => { img.style.opacity = '0.25'; img.title = '图片加载失败'; });
     card.querySelector('[data-act="copy"]').addEventListener('click', () => copyUrl(url));
     card.querySelector('[data-act="rename"]').addEventListener('click', () => askRename(icon));
     card.querySelector('[data-act="delete"]').addEventListener('click', () => askDelete(icon));
@@ -766,25 +818,15 @@ async function saveIcon() {
       await putFile(`${config.dir}/${file}`, `feat: add icon ${file}`, content, existed && existed.sha);
     });
 
-    // 2. 更新 icons.json 索引
-    let list;
-    await withRetryOnConflict(async () => {
-      const idx = await readIndex();
-      list = idx.list;
-      // 不再写入绝对 url：地址由当前配置实时拼出，换仓库/分支后不会失效
+    // 2. 更新索引与客户端图标库，并以本地结果刷新界面
+    //    （Contents API 提交后存在短暂缓存，回读可能拿到旧数据）
+    await commitIndex((list) => {
       list.push({ name: name || file.replace(/\.png$/, ''), file });
-      list.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
-      await writeIndex(list, idx.sha);
-    });
+      return list;
+    }, `feat: add icon ${file}`);
 
-    // 3. 以本地写入结果为准刷新界面（Contents API 提交后存在短暂缓存，回读可能拿到旧数据）
-    clearCache();
-    cacheBust = Date.now();
-    icons = list;
-    writeCache(list);
     closeEditor();
-    renderGrid();
-    showToast('✓ 已保存到 GitHub');
+    showToast('✓ 已上传到 GitHub');
   } catch (e) {
     showToast(ghMessage(e, '保存失败'), 'err');
   } finally {
@@ -801,33 +843,22 @@ function askConfirm(text, onOk) {
 
 // ---------- 删除图标 ----------
 function askDelete(icon) {
-  askConfirm(`确定删除「${icon.name || icon.file}」？此操作会同时删除仓库中的 PNG。`, () => doDelete(icon));
+  askConfirm(`确定删除「${icon.name || icon.file}」？同时会删除仓库中对应的 PNG 文件。`,
+    () => doDelete(icon));
 }
 
 async function doDelete(icon) {
   if (!requireConfig()) return;
   try {
     showLoading('正在删除图标…');
-    // 1. 获取 PNG 的 SHA 并删除
     await withRetryOnConflict(async () => {
       const f = await getFile(`${config.dir}/${icon.file}`);
-      if (f) {
-        await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
-      }
+      if (f) await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
     });
-    // 2. 更新 icons.json，并以本地结果刷新界面（规避 Contents API 提交后的短暂缓存）
-    let next;
-    await withRetryOnConflict(async () => {
-      const idx = await readIndex();
-      next = idx.list.filter((i) => i.file !== icon.file);
-      await writeIndex(next, idx.sha);
-    });
-
-    clearCache();
-    cacheBust = Date.now();
-    icons = next;
-    writeCache(next);
-    renderGrid();
+    await commitIndex(
+      (list) => list.filter((i) => i.file !== icon.file),
+      `feat: remove icon ${icon.file}`
+    );
     showToast('✓ 已删除');
   } catch (e) {
     showToast(ghMessage(e, '删除失败'), 'err');
@@ -862,25 +893,176 @@ async function doRename() {
   if (!requireConfig()) return;
   try {
     showLoading('正在重命名…');
-    let next;
-    await withRetryOnConflict(async () => {
-      const idx = await readIndex();
-      // 归一化条目：只保留 name / file，顺带清掉历史遗留的 url 字段
-      next = idx.list
-        .map((i) => ({ name: i.file === icon.file ? name : (i.name || i.file), file: i.file }))
-        .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh'));
-      await writeIndex(next, idx.sha);
-    });
-    clearCache();
-    icons = next;
-    writeCache(next);
-    renderGrid();
+    await commitIndex((list) => list.map((i) => ({
+      name: i.file === icon.file ? name : (i.name || i.file),
+      file: i.file
+    })), `chore: rename icon ${icon.file}`);
     showToast('✓ 已重命名');
   } catch (e) {
     showToast(ghMessage(e, '重命名失败'), 'err');
   } finally {
     hideLoading();
   }
+}
+
+// ---------- 导出与客户端导入 ----------
+let lastIconsetUrl = '';
+
+function openClient() {
+  if (!requireConfig()) return;
+  // 与主流 Emby 图标库一致：直接用 raw 地址，客户端订阅最稳
+  lastIconsetUrl = `https://raw.githubusercontent.com/${config.owner}/${config.repo}/${config.branch}/${ICONSET_PATH}`;
+  $('iconsetUrl').value = lastIconsetUrl;
+  const enc = encodeURIComponent(lastIconsetUrl);
+  const here = location.origin + location.pathname.replace(/index\.html$/, '');
+  $('senplayerLink').href = `${here}import.html?to=senplayer&iconset=${enc}`;
+  $('rodelLink').href = `${here}import.html?to=rodel&iconset=${enc}`;
+  openModal('clientModal');
+}
+
+// ---------- 配置迁移：加密导出 / 导入 ----------
+// 换个设备就要重填一遍配置（尤其是一长串 Token），所以做成加密导出：
+// PBKDF2 派生密钥 + AES-GCM 加密，密文由用户自己保管，页面不存、不上传
+const TRANSFER_PREFIX = 'EIS1';
+const PBKDF2_ROUNDS = 200000;
+
+function b64enc(buf) {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64dec(str) {
+  const s = str.replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(s + '='.repeat((4 - (s.length % 4)) % 4));
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+async function deriveKey(pwd, salt) {
+  const km = await crypto.subtle.importKey('raw', new TextEncoder().encode(pwd), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: PBKDF2_ROUNDS, hash: 'SHA-256' },
+    km,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function encryptConfig(obj, pwd) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(pwd, salt);
+  const ct = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, key, new TextEncoder().encode(JSON.stringify(obj))
+  );
+  return [TRANSFER_PREFIX, b64enc(salt), b64enc(iv), b64enc(ct)].join('.');
+}
+
+async function decryptConfig(text, pwd) {
+  const parts = String(text || '').trim().split('.');
+  if (parts.length !== 4 || parts[0] !== TRANSFER_PREFIX) throw new Error('格式不对');
+  const key = await deriveKey(pwd, b64dec(parts[1]));
+  const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64dec(parts[2]) }, key, b64dec(parts[3]));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+
+let transferMode = 'export';
+
+function setTransferMode(mode) {
+  transferMode = mode;
+  $('transferIn').hidden = mode !== 'import';
+  $('transferOut').hidden = mode !== 'export';
+  $('transferPrimary').textContent = mode === 'export' ? '生成导出内容' : '解密并导入';
+  $('tabExport').classList.toggle('btn-primary', mode === 'export');
+  $('tabExport').classList.toggle('btn-ghost', mode !== 'export');
+  $('tabImport').classList.toggle('btn-primary', mode === 'import');
+  $('tabImport').classList.toggle('btn-ghost', mode !== 'import');
+  $('transferHint').textContent = mode === 'export'
+    ? '把 GitHub 配置（含 Token）用密码加密后导出一串文本。换设备时导入它并输入同一个密码即可，不必重新填写。'
+    : '粘贴之前导出的内容，输入同一个密码，即可在这台设备上恢复配置。';
+}
+
+function openTransfer(mode = 'export') {
+  if (!cryptoReady()) { showToast('当前环境不支持加密，无法迁移配置', 'err'); return; }
+  if (mode === 'export' && !isConfigReady()) { showToast('请先完成 GitHub 配置', 'err'); return; }
+  $('transferText').value = '';
+  $('transferResult').value = '';
+  resetPwdToggles();
+  setTransferMode(mode);
+  openModal('transferModal');
+}
+
+async function exportConfig() {
+  const pwd = $('transferPwd').value;
+  if (pwd.length < 4) { showToast('请设置至少 4 位的保护密码', 'err'); return; }
+  try {
+    $('transferResult').value = await encryptConfig(config, pwd);
+    showToast('✓ 已生成，复制或下载保存好');
+  } catch (e) {
+    showToast('加密失败：' + (e.message || ''), 'err');
+  }
+}
+
+async function importConfig() {
+  const text = $('transferText').value.trim();
+  const pwd = $('transferPwd').value;
+  if (!text) { showToast('请粘贴导出内容', 'err'); return; }
+  if (!pwd) { showToast('请输入保护密码', 'err'); return; }
+
+  let c;
+  try {
+    c = await decryptConfig(text, pwd);
+  } catch {
+    showToast('解密失败：内容或密码不正确', 'err');
+    return;
+  }
+  if (!c || !c.owner || !c.repo || !c.token) {
+    showToast('内容不完整，缺少用户名 / 仓库 / Token', 'err');
+    return;
+  }
+
+  const next = {
+    owner: c.owner,
+    repo: c.repo,
+    branch: c.branch || 'main',
+    dir: c.dir || 'icons',
+    token: c.token
+  };
+  const prev = config;
+  config = next;
+  try {
+    showLoading('正在校验配置…');
+    await checkConnection();
+    hideLoading();
+  } catch (e) {
+    config = prev;
+    hideLoading();
+    showToast('已解密，但仓库校验未通过：' + ghMessage(e, '连接失败'), 'err');
+    return;
+  }
+
+  localStorage.setItem(CONFIG_KEY, JSON.stringify(next));
+  closeModal('transferModal');
+  clearCache();
+  cacheBust = Date.now();
+  unlocked = false;   // 新设备重新设一次访问密码
+  updateRepoLink();
+  loadIcons({ force: true });
+  showToast('✓ 配置已导入');
+}
+
+function downloadTransfer() {
+  const text = $('transferResult').value.trim();
+  if (!text) { showToast('请先点「生成导出内容」', 'err'); return; }
+  const blob = new Blob([text + '\n'], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'emby-icon-studio-config.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 // ---------- 设置弹窗 ----------
@@ -1096,20 +1278,51 @@ function bindEvents() {
     if (e.key === 'Enter') doRename();
   });
 
-  // 刷新 / 导出
+  // 刷新 / 导入 / 客户端
   $('refreshBtn').addEventListener('click', async () => {
     if (!requireConfig()) return;
     cacheBust = Date.now();
+    renderLimit = 120;
     await loadIcons({ force: true });
     showToast('✓ 已刷新');
   });
-  $('exportBtn').addEventListener('click', () => {
+  $('clientBtn').addEventListener('click', openClient);
+
+  // 配置迁移（加密导出 / 导入）
+  $('exportConfigBtn').addEventListener('click', () => openTransfer('export'));
+  $('hintImportBtn').addEventListener('click', () => openTransfer('import'));
+  $('hintSettingsBtn').addEventListener('click', requestSettingsAccess);
+  $('tabExport').addEventListener('click', () => setTransferMode('export'));
+  $('tabImport').addEventListener('click', () => setTransferMode('import'));
+  $('transferPrimary').addEventListener('click', () => {
+    if (transferMode === 'export') exportConfig();
+    else importConfig();
+  });
+  $('copyTransfer').addEventListener('click', () => copyUrl($('transferResult').value));
+  $('downloadTransfer').addEventListener('click', downloadTransfer);
+
+  // 客户端弹窗
+  $('copyIconset').addEventListener('click', () => copyUrl(lastIconsetUrl));
+  $('exportTxtBtn').addEventListener('click', () => {
     if (!requireConfig()) return;
     exportUrls();
   });
 
-  // 搜索
-  $('searchInput').addEventListener('input', renderGrid);
+  // 分批渲染
+  $('loadMoreBtn').addEventListener('click', () => {
+    renderLimit += 120;
+    renderGrid();
+  });
+
+  // 搜索（防抖，图标多时避免每次按键都重建整个网格）
+  let searchTimer = null;
+  $('searchInput').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      renderLimit = 120;
+      renderGrid();
+    }, 140);
+  });
 
   // data-close 按钮 / 点击遮罩 / Esc 关闭
   document.querySelectorAll('[data-close]').forEach((btn) =>
