@@ -514,12 +514,26 @@ function tileHtml(icon) {
   </article>`;
 }
 
-// 首帧还不知道列数时，用网格宽度粗估一下，避免一次渲染上千个卡片。
+// 首帧还没渲染时无法量列数，先用 4 列兜底；渲染完会用真实列数校正。
 function guessCols(grid) {
-  const w = grid.clientWidth;
-  if (!w) return 4;
-  const min = parseFloat(getComputedStyle(grid).gridTemplateColumns.split(' ')[0]) || 152;
-  return Math.max(1, Math.floor((w + 14) / (min + 14)));
+  const cols = getComputedStyle(grid).gridTemplateColumns;
+  if (cols && cols !== 'none') return cols.trim().split(/\s+/).length;
+  return 4;
+}
+
+// 从已渲染的卡片反推真实列数：同一行的卡片 top 值相同。
+// 布局还没算出来时所有 top 都是 0，此时靠 CSS 的列数兜底。
+function measureCols(grid) {
+  const tiles = grid.querySelectorAll('.tile');
+  if (!tiles.length) return 0;
+  const firstTop = tiles[0].getBoundingClientRect().top;
+  if (!firstTop && !tiles[0].getBoundingClientRect().height) return guessCols(grid);
+  let n = 0;
+  for (const t of tiles) {
+    if (Math.abs(t.getBoundingClientRect().top - firstTop) < 1) n++;
+    else break;
+  }
+  return n || 1;
 }
 
 function renderGrid() {
@@ -556,12 +570,12 @@ function renderGrid() {
     }
     const tileH = tiles[0].getBoundingClientRect().height;
     const gap = parseFloat(getComputedStyle(grid).rowGap) || 0;
-    const cols = Math.max(1, Math.round((grid.clientWidth + gap) / (tiles[0].getBoundingClientRect().width + gap)));
-    const want = targetRows * cols;
+    const cols = measureCols(grid);
+    const want = Math.min(list.length, targetRows * cols);
 
-    // 列数和我们估算的不一致（首次渲染、窗口缩放），按真实列数重画一次
-    if (want !== slice.length || renderedRows === 0) {
-      renderedRows = targetRows;
+    // 首帧或窗口缩放后列数变了，按真实列数重画一次，保证「4 行」是准的
+    renderedRows = targetRows;
+    if (want !== slice.length) {
       slice = list.slice(0, want);
       paint(slice);
     }
@@ -570,10 +584,9 @@ function renderGrid() {
       $('loadMore').hidden = list.length <= slice.length;
       return;
     }
-    const pageRows = ROWS_PER_PAGE;
-    const pageH = tileH * pageRows + gap * (pageRows - 1);
-    // 还有下一屏内容才显示按钮
-    $('loadMore').hidden = grid.scrollHeight <= pageH + 2 && list.length <= slice.length;
+    const pageH = tileH * ROWS_PER_PAGE + gap * (ROWS_PER_PAGE - 1);
+    // 已经铺满 4 行，且后面还有内容，才给按钮
+    $('loadMore').hidden = grid.scrollHeight <= pageH + 2 || list.length <= slice.length;
   });
 }
 
