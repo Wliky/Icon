@@ -15,7 +15,6 @@ const CONFIG_KEY_LEGACY = 'eis_github_config';
 const CACHE_KEY = 'icon_icons_cache';
 const PWD_KEY = 'icon_settings_pwd';
 const THEME_KEY = 'icon_theme';
-const BG_KEY = 'icon_bg';
 const CACHE_TTL = 5 * 60 * 1000;
 const INDEX_PATH = 'data/icons.json';
 const ICONSET_PATH = 'data/iconset.json';
@@ -28,7 +27,6 @@ const PINYIN_CDN = 'https://cdn.jsdelivr.net/npm/pinyin-pro@3/dist/index.min.js'
 const JSZIP_CDN = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
 const LIB_NAME = 'Icon';
 const RENDER_STEP = 120;
-const CROP_DEFAULT = 108;
 
 // ---------- 状态 ----------
 let config = migrateConfig() || readConfig();
@@ -44,7 +42,7 @@ let pinyinLoader = null;
 let jszipLoader = null;
 let selectMode = false;
 let selected = new Set();
-let crop = null;
+let lastPickIdx = -1;
 
 // ---------- 小工具 ----------
 const $ = (id) => document.getElementById(id);
@@ -120,8 +118,6 @@ function repoSlug() {
 function updateRepoLink() {
   const slug = repoSlug();
   const url = `https://github.com/${slug}`;
-  $('repoLink').href = url;
-  $('repoLabel').textContent = slug;
   $('ghBtn').href = url;
   $('ghBtn').title = `打开 GitHub 仓库：${url}`;
 }
@@ -164,25 +160,6 @@ function toggleThemeMenu(force) {
   $('themeBtn').setAttribute('aria-expanded', String(open));
 }
 function closeThemeMenu() { toggleThemeMenu(false); }
-
-// ---------- 页面背景 ----------
-function readBg() {
-  try { return JSON.parse(localStorage.getItem(BG_KEY)) || { url: '', dim: 60 }; }
-  catch { return { url: '', dim: 60 }; }
-}
-
-function applyBg(bg = readBg()) {
-  const url = String((bg && bg.url) || '').trim();
-  const dim = Math.min(90, Math.max(0, Number(bg && bg.dim) || 0));
-  $('bgLayer').style.backgroundImage = url ? `url("${url.replace(/["'\\]/g, '')}")` : 'none';
-  $('bgDim').style.opacity = url ? String(dim / 100) : '1';
-  document.body.classList.toggle('has-bg', !!url);
-}
-
-function saveBg(bg) {
-  try { localStorage.setItem(BG_KEY, JSON.stringify(bg)); } catch { /* ignore */ }
-  applyBg(bg);
-}
 
 // ---------- 设置访问密码 ----------
 function cryptoReady() {
@@ -529,7 +506,6 @@ function tileHtml(icon) {
     <div class="tile-body">
       <span class="tile-name" title="${name}">${name}</span>
       <span class="tile-act">
-        <button type="button" data-act="crop" title="裁剪"><svg class="ico"><use href="#i-crop"/></svg></button>
         <button type="button" data-act="rename" title="重命名"><svg class="ico"><use href="#i-settings"/></svg></button>
         <button type="button" class="del" data-act="delete" title="删除"><svg class="ico"><use href="#i-trash"/></svg></button>
       </span>
@@ -550,7 +526,17 @@ function renderGrid() {
   $('empty').hidden = icons.length > 0 || !isConfigReady();
   $('noResult').hidden = !(icons.length > 0 && list.length === 0);
   $('noResultKey').textContent = q;
-  $('loadMore').hidden = list.length <= slice.length;
+
+  // 只在图标超过 4 行时才出现「显示更多」
+  requestAnimationFrame(() => {
+    const first = grid.querySelector('.tile');
+    if (!first) { $('loadMore').hidden = true; return; }
+    const tileH = first.getBoundingClientRect().height;
+    const gap = parseFloat(getComputedStyle(grid).rowGap) || 0;
+    if (!tileH) { $('loadMore').hidden = list.length <= slice.length; return; }
+    const fourRows = tileH * 4 + gap * 3;
+    $('loadMore').hidden = grid.scrollHeight <= fourRows + 2;
+  });
 
   grid.querySelectorAll('img').forEach((img) => {
     img.onerror = () => {
@@ -564,6 +550,7 @@ function renderBulkBar() {
   $('bulkBar').hidden = !(selectMode || n > 0);
   $('bulkCount').textContent = `已选 ${n} 个`;
   $('bulkDownload').disabled = n === 0;
+  $('bulkDelete').disabled = n === 0;
   $('selectBtn').classList.toggle('on', selectMode);
 }
 
@@ -581,8 +568,26 @@ function pruneSelection() {
 
 function setSelectMode(on) {
   selectMode = on;
+  lastPickIdx = -1;
   if (!on) selected.clear();
   renderAll();
+  if (on) showToast('点卡片即可选中，按住 Shift 连选');
+}
+
+// 勾选 / 取消勾选；shift 按下时从上一次点击的位置连选
+function togglePick(icon, shift) {
+  const list = filteredIcons();
+  const idx = list.findIndex((i) => i.file === icon.file);
+  if (shift && lastPickIdx >= 0 && idx >= 0) {
+    const [s, e] = idx >= lastPickIdx ? [lastPickIdx, idx] : [idx, lastPickIdx];
+    for (let k = s; k <= e; k++) selected.add(list[k].file);
+  } else {
+    if (selected.has(icon.file)) selected.delete(icon.file);
+    else selected.add(icon.file);
+    lastPickIdx = idx;
+  }
+  if (selectMode) renderAll();
+  else setSelectMode(true);
 }
 
 // ---------- 复制 ----------
@@ -788,158 +793,67 @@ function downloadSelected() {
   downloadZip(list);
 }
 
-// ---------- 裁剪编辑器 ----------
-function loadImage(src, cross) {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    if (cross) img.crossOrigin = 'anonymous';
-    img.onload = () => resolve(img);
-    img.onerror = () => reject(new Error('图片加载失败'));
-    img.src = src;
-  });
-}
-
-async function openCrop(icon) {
-  if (!isConfigReady()) { showToast('请先完成 GitHub 配置', 'err'); return; }
-  showLoading('加载图片…');
-  let img;
-  try {
-    img = await loadImage(withCacheBust(iconUrl(icon)), true);
-  } catch {
-    hideLoading();
-    showToast('图片加载失败，无法裁剪', 'err');
-    return;
-  }
-  hideLoading();
-
-  crop = {
-    icon, img,
-    zoom: 1, x: 0, y: 0,
-    size: CROP_DEFAULT, shape: 'square',
-    natW: img.naturalWidth, natH: img.naturalHeight
-  };
-
-  $('cropImg').src = img.src;
-  $('cropZoom').value = '100';
-  $('cropZoomVal').textContent = '100%';
-  document.querySelectorAll('#sizeSeg .seg-btn').forEach((b) => b.classList.toggle('on', b.dataset.size === String(CROP_DEFAULT)));
-  document.querySelectorAll('#shapeSeg .seg-btn').forEach((b) => b.classList.toggle('on', b.dataset.shape === 'square'));
-
-  openModal('editorModal');
-  requestAnimationFrame(() => applyCrop());
-}
-
-function stageSize() {
-  return $('cropStage').clientWidth || 320;
-}
-
-function applyCrop() {
-  if (!crop) return;
-  const S = stageSize();
-  const base = Math.max(S / crop.natW, S / crop.natH);   // cover：图片始终铺满裁剪框
-  const scale = base * crop.zoom;
-  const maxX = Math.max(0, (crop.natW * scale - S) / 2);
-  const maxY = Math.max(0, (crop.natH * scale - S) / 2);
-  crop.x = Math.min(maxX, Math.max(-maxX, crop.x));
-  crop.y = Math.min(maxY, Math.max(-maxY, crop.y));
-
-  const el = $('cropImg');
-  el.style.width = `${crop.natW}px`;
-  el.style.height = `${crop.natH}px`;
-  el.style.transform =
-    `translate(${S / 2 + crop.x - (crop.natW * scale) / 2}px, ${S / 2 + crop.y - (crop.natH * scale) / 2}px) scale(${scale})`;
-
-  $('cropStage').classList.toggle('round', crop.shape === 'circle');
-  $('cropZoomVal').textContent = `${Math.round(crop.zoom * 100)}%`;
-}
-
-function setCropZoom(z) {
-  if (!crop) return;
-  crop.zoom = Math.min(4, Math.max(1, z));
-  $('cropZoom').value = String(Math.round(crop.zoom * 100));
-  applyCrop();
-}
-
-function resetCrop() {
-  if (!crop) return;
-  crop.zoom = 1; crop.x = 0; crop.y = 0;
-  $('cropZoom').value = '100';
-  applyCrop();
-}
-
-function cropCanvas() {
-  const S = stageSize();
-  const { img, zoom, x, y, size, shape, natW, natH } = crop;
-  const base = Math.max(S / natW, S / natH);
-  const scale = base * zoom;
-  const left = S / 2 + x - (natW * scale) / 2;
-  const top = S / 2 + y - (natH * scale) / 2;
-  const sx = -left / scale;
-  const sy = -top / scale;
-  const sw = S / scale;
-
-  const c = document.createElement('canvas');
-  c.width = size;
-  c.height = size;
-  const ctx = c.getContext('2d');
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  if (shape === 'circle') {
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-  }
-  ctx.drawImage(img, sx, sy, sw, sw, 0, 0, size, size);
-  return c;
-}
-
-async function saveCrop() {
-  if (!crop) return;
-  const { icon, size } = crop;
-  showLoading('生成并上传…');
-  try {
-    const blob = await new Promise((r) => cropCanvas().toBlob(r, 'image/png'));
-    if (!blob) throw new Error('生成失败');
-    const b64 = await blobToBase64(blob);
-
-    const oldPath = `${config.dir}/${icon.file}`;
-    const isPng = /\.png$/i.test(icon.file);
-
-    if (isPng) {
-      const f = await getFile(oldPath);
-      await putFile(oldPath, `feat: crop icon ${icon.file} to ${size}`, b64, f && f.sha);
-    } else {
-      // 裁剪输出的是 PNG：换扩展名存一份新的，再删掉旧文件
-      const base = icon.file.replace(/\.[^.]+$/, '');
-      const newFile = await makeUniqueName(base, await listIconDir(), 'png');
-      await putFile(`${config.dir}/${newFile}`, `feat: crop icon ${icon.file} to ${size}`, b64);
-      const old = await getFile(oldPath);
-      if (old) await deleteGhFile(oldPath, `feat: remove original ${icon.file}`, old.sha);
-      await commitIndex(
-        async (list) => list.map((i) => (i.file === icon.file ? { ...i, file: newFile } : i)),
-        `feat: replace ${icon.file} with cropped ${newFile}`
-      );
-    }
-
-    cacheBust = Date.now();
-    clearCache();
-    closeModal('editorModal');
-    await loadIcons({ force: true });
-    showToast(`✓ 已裁剪为 ${size}×${size} 并保存`);
-  } catch (e) {
-    showToast(ghMessage(e, '裁剪保存失败'), 'err');
-  } finally {
-    hideLoading();
-  }
-}
-
 // ---------- 删除 / 重命名 ----------
 function askDelete(icon) {
   $('confirmTitle').textContent = '删除图标';
   $('confirmText').textContent = `确定删除「${icon.name || icon.file}」吗？仓库里的图片文件会一起删除，且无法撤销。`;
   confirmHandler = () => doDelete(icon);
   openModal('confirmModal');
+}
+
+function askDeleteSelected() {
+  const list = icons.filter((i) => selected.has(i.file));
+  if (!list.length) return;
+  $('confirmTitle').textContent = '批量删除图标';
+  $('confirmText').textContent =
+    `确定删除选中的 ${list.length} 个图标吗？仓库里的图片文件会一起删除，且无法撤销。`;
+  confirmHandler = () => deleteSelected(list);
+  openModal('confirmModal');
+}
+
+async function deleteSelected(list) {
+  closeModal('confirmModal');
+  showLoading(`删除 1/${list.length}`, 0.03);
+  const removed = new Set();
+  const failed = [];
+  try {
+    for (let i = 0; i < list.length; i++) {
+      showLoading(`删除 ${i + 1}/${list.length}`, (i + 1) / (list.length + 1));
+      const icon = list[i];
+      try {
+        const f = await getFile(`${config.dir}/${icon.file}`);
+        if (f) await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
+        removed.add(icon.file);
+      } catch {
+        failed.push(icon.name || icon.file);
+      }
+    }
+    // 索引只提交一次：删 N 个图标也只写一遍 icons.json
+    if (removed.size) {
+      showLoading('写入索引…', 0.98);
+      await commitIndex(
+        async (l) => l.filter((i) => !removed.has(i.file)),
+        `feat: remove ${removed.size} icon(s)`
+      );
+    }
+    selected.clear();
+    setSelectMode(false);
+    cacheBust = Date.now();
+    clearCache();
+    await loadIcons({ force: true });
+    if (failed.length) {
+      showToast(
+        `${removed.size ? `✓ 已删除 ${removed.size} 个，` : ''}${failed.length} 个失败`,
+        removed.size ? 'ok' : 'err'
+      );
+    } else {
+      showToast(`✓ 已删除 ${removed.size} 个图标`);
+    }
+  } catch (e) {
+    showToast(ghMessage(e, '批量删除失败'), 'err');
+  } finally {
+    hideLoading();
+  }
 }
 
 async function doDelete(icon) {
@@ -1022,21 +936,9 @@ function openSettings() {
     : '当前是自定义域名或本地调试，无法自动识别，请在「高级」里手动填写。';
   $('advBox').open = !auto;
 
-  const bg = readBg();
-  $('cfgBgUrl').value = bg.url || '';
-  $('cfgBgDim').value = String(bg.dim ?? 60);
-  $('cfgBgDimVal').textContent = `${bg.dim ?? 60}%`;
-
   resetPwdToggles();
   openModal('settingsModal');
   setTimeout(() => $('cfgToken').focus(), 0);
-}
-
-function readBgForm() {
-  return {
-    url: $('cfgBgUrl').value.trim(),
-    dim: Number($('cfgBgDim').value) || 0
-  };
 }
 
 async function saveSettings() {
@@ -1045,9 +947,6 @@ async function saveSettings() {
   const repo = $('cfgRepo').value.trim();
   const branch = $('cfgBranch').value.trim() || DEFAULT_BRANCH;
   const dir = ($('cfgDir').value.trim() || DEFAULT_DIR).replace(/^\/+|\/+$/g, '');
-
-  // 背景独立于 GitHub 配置，先存
-  saveBg(readBgForm());
 
   if (!token) { showToast('请填写 GitHub Token', 'err'); return; }
   if (!owner || !repo) { showToast('请填写仓库的用户名和名称', 'err'); return; }
@@ -1171,6 +1070,7 @@ function bindEvents() {
   });
   $('bulkNone').addEventListener('click', () => { selected.clear(); renderAll(); });
   $('bulkDownload').addEventListener('click', downloadSelected);
+  $('bulkDelete').addEventListener('click', askDeleteSelected);
 
   // 网格操作
   $('iconGrid').addEventListener('click', (e) => {
@@ -1181,13 +1081,8 @@ function bindEvents() {
     const act = e.target.closest('[data-act]');
     if (!act) return;
     const a = act.dataset.act;
-    if (a === 'pick') {
-      if (!selectMode) setSelectMode(true);
-      if (selected.has(icon.file)) selected.delete(icon.file);
-      else selected.add(icon.file);
-      renderAll();
-    } else if (a === 'preview') openPreview(icon);
-    else if (a === 'crop') openCrop(icon);
+    if (a === 'pick') { togglePick(icon, e.shiftKey); return; }
+    if (a === 'preview') openPreview(icon);
     else if (a === 'rename') askRename(icon);
     else if (a === 'delete') askDelete(icon);
   });
@@ -1200,31 +1095,6 @@ function bindEvents() {
   // 设置弹窗
   $('saveSettingsBtn').addEventListener('click', saveSettings);
   $('clearSettingsBtn').addEventListener('click', clearSettings);
-
-  // 背景
-  let bgTimer = null;
-  const bgLive = () => {
-    clearTimeout(bgTimer);
-    bgTimer = setTimeout(() => {
-      const bg = readBgForm();
-      $('cfgBgDimVal').textContent = `${bg.dim}%`;
-      saveBg(bg);
-    }, 300);
-  };
-  $('cfgBgUrl').addEventListener('input', bgLive);
-  $('cfgBgDim').addEventListener('input', () => {
-    $('cfgBgDimVal').textContent = `${$('cfgBgDim').value}%`;
-    bgLive();
-  });
-  $('bgApplyBtn').addEventListener('click', () => {
-    saveBg(readBgForm());
-    showToast('✓ 背景已应用');
-  });
-  $('bgClearBtn').addEventListener('click', () => {
-    $('cfgBgUrl').value = '';
-    saveBg({ url: '', dim: 60 });
-    showToast('✓ 已清除背景');
-  });
 
   // 密码弹窗
   $('pwdSetupOk').addEventListener('click', doPwdSetup);
@@ -1244,45 +1114,6 @@ function bindEvents() {
   // 预览
   $('previewCopy').addEventListener('click', () => {
     if (previewIcon) copyText(iconUrl(previewIcon), '✓ 图片地址已复制');
-  });
-
-  // 裁剪编辑器
-  let drag = null;
-  const stage = $('cropStage');
-  stage.addEventListener('pointerdown', (e) => {
-    if (!crop) return;
-    stage.setPointerCapture(e.pointerId);
-    drag = { px: e.clientX, py: e.clientY, x: crop.x, y: crop.y };
-  });
-  stage.addEventListener('pointermove', (e) => {
-    if (!drag || !crop) return;
-    crop.x = drag.x + (e.clientX - drag.px);
-    crop.y = drag.y + (e.clientY - drag.py);
-    applyCrop();
-  });
-  ['pointerup', 'pointercancel'].forEach((ev) =>
-    stage.addEventListener(ev, () => { drag = null; })
-  );
-  stage.addEventListener('wheel', (e) => {
-    if (!crop) return;
-    e.preventDefault();
-    setCropZoom(crop.zoom * (e.deltaY > 0 ? 0.94 : 1.06));
-  }, { passive: false });
-  $('cropZoom').addEventListener('input', () => setCropZoom(Number($('cropZoom').value) / 100));
-  $('cropReset').addEventListener('click', resetCrop);
-  $('cropSave').addEventListener('click', saveCrop);
-  $('sizeSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('.seg-btn');
-    if (!b || !crop) return;
-    crop.size = Number(b.dataset.size);
-    document.querySelectorAll('#sizeSeg .seg-btn').forEach((x) => x.classList.toggle('on', x === b));
-  });
-  $('shapeSeg').addEventListener('click', (e) => {
-    const b = e.target.closest('.seg-btn');
-    if (!b || !crop) return;
-    crop.shape = b.dataset.shape;
-    document.querySelectorAll('#shapeSeg .seg-btn').forEach((x) => x.classList.toggle('on', x === b));
-    applyCrop();
   });
 
   // 通用：关闭按钮 / 点遮罩关闭 / Esc
@@ -1308,7 +1139,6 @@ function bindEvents() {
 // ---------- 初始化 ----------
 function init() {
   applyTheme();
-  applyBg();
   bindEvents();
   updateRepoLink();
   renderAll();

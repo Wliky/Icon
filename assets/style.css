@@ -166,7 +166,7 @@ body {
 .btn.danger-text { background: transparent; border-color: transparent; color: var(--danger); padding: 0 10px; }
 .btn.danger-text:hover { background: var(--danger-soft); }
 
-.btn.block { width: 100%; margin-top: 18px; }
+.btn.block { width: 100%; margin-top: 4px; }
 
 .icon-btn {
   width: 34px; height: 34px;
@@ -205,15 +205,16 @@ body {
   padding: 22px;
 }
 
-main.wrap { padding-top: 24px; padding-bottom: 60px; }
+main.wrap { padding-top: 22px; padding-bottom: 64px; display: flex; flex-direction: column; gap: 18px; }
 
-/* 订阅地址卡 */
+/* 订阅地址卡：页面主卡，权重最高 */
 .sub-card {
   position: relative;
   overflow: hidden;
   background:
     linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--surface)), var(--surface) 55%);
   border-color: var(--accent-line);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, .05), 0 18px 40px -20px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 .sub-card::before {
   content: '';
@@ -223,8 +224,11 @@ main.wrap { padding-top: 24px; padding-bottom: 60px; }
   background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 40%, #a855f7));
 }
 
+/* 引导卡：临时性内容，弱化 */
+.card.guide { background: var(--surface-2); box-shadow: none; padding: 20px 22px; }
+
 .sub-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
-.sub-head h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: .2px; }
+.sub-head h2 { margin: 0 0 4px; font-size: 17px; font-weight: 680; letter-spacing: .2px; }
 .sub-head p { margin: 0; color: var(--text-dim); font-size: 13.5px; max-width: 62ch; }
 
 .pill {
@@ -296,7 +300,7 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 24px 0 14px;
+  margin: 0;
 }
 
 .search {
@@ -343,13 +347,15 @@ code {
 /* ---------------- 图标网格 ---------------- */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
   gap: 14px;
-  margin-top: 18px;
+  margin-top: 16px;
 }
 
 .tile {
   position: relative;
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -357,36 +363,56 @@ code {
   overflow: hidden;
   transition: transform .16s, box-shadow .16s, border-color .16s;
 }
-.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow); border-color: var(--border-strong); }
+.tile:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
 
 .tile-img {
+  position: relative;
   display: grid;
   place-items: center;
   aspect-ratio: 1 / 1;
   padding: 16px;
-  background:
-    linear-gradient(180deg, var(--surface-2), var(--surface-3));
+  background: linear-gradient(180deg, var(--surface-2), var(--surface-3));
   cursor: zoom-in;
 }
+/* 图片区加一层内圈，让图标和底色之间有边界感 */
+.tile-img::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .16s;
+}
+.tile:hover .tile-img::after { opacity: 1; }
 .tile-img img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
 
 .tile-body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 9px 10px 9px 12px;
+  padding: 9px 8px 9px 12px;
   border-top: 1px solid var(--border);
+  background: var(--surface);
+  margin-top: auto;
 }
 .tile-name {
   flex: 1;
   min-width: 0;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: -.005em;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.tile-act { display: flex; gap: 2px; opacity: 0; transition: opacity .16s; }
+.tile-act { display: flex; gap: 2px; flex: none; opacity: 0; transition: opacity .16s; }
 .tile:hover .tile-act, .tile:focus-within .tile-act { opacity: 1; }
 .tile-act button {
   width: 26px; height: 26px;
@@ -402,21 +428,6 @@ code {
 .tile-act button.del:hover { background: var(--danger-soft); color: var(--danger); }
 
 .state { margin: 34px 0; text-align: center; color: var(--text-faint); font-size: 14px; }
-
-/* ---------------- 页脚 ---------------- */
-.site-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-top: 46px;
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-  color: var(--text-faint);
-  font-size: 12.5px;
-}
-.site-foot a { color: var(--text-dim); text-decoration: none; }
-.site-foot a:hover { color: var(--accent); }
 
 /* ---------------- 弹窗 ---------------- */
 .modal {
@@ -602,23 +613,6 @@ code {
 .grid.picking .tile-check { opacity: 1; }
 .btn.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
 
-/* ---------------- 背景层 ---------------- */
-.bg-layer {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  background-image: none;
-  background-size: cover;
-  background-position: center;
-  background-attachment: fixed;
-  transition: background-image .3s;
-}
-.bg-dim { position: absolute; inset: 0; background: var(--bg); opacity: 1; transition: opacity .3s; }
-
-/* 有背景图时，卡片稍微提高不透明度以保证可读性 */
-body.has-bg .topbar { background: color-mix(in srgb, var(--bg) 72%, transparent); }
-body.has-bg .card { background: color-mix(in srgb, var(--surface) 92%, transparent); }
-
 /* ---------------- 主题菜单 ---------------- */
 .menu-wrap { position: relative; }
 
@@ -661,16 +655,17 @@ body.has-bg .card { background: color-mix(in srgb, var(--surface) 92%, transpare
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: -2px 0 4px;
+  margin: 0;
   padding: 9px 12px;
   border: 1px solid var(--accent-line);
   border-radius: 12px;
   background: var(--accent-soft);
   color: var(--text);
   font-size: 13.5px;
+  font-weight: 600;
 }
 .bulkbar[hidden] { display: none; }
-.bulkbar .btn { height: 30px; font-size: 13px; }
+.bulkbar .btn { height: 30px; font-size: 13px; font-weight: 500; }
 
 /* 卡片多选 */
 .tile.pick .tile-check { opacity: 1; }
@@ -693,62 +688,16 @@ body.has-bg .card { background: color-mix(in srgb, var(--surface) 92%, transpare
 .tile.sel .tile-check { background: var(--accent); border-color: var(--accent); color: #fff; }
 .tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 
-/* ---------------- 裁剪编辑器 ---------------- */
-.crop-wrap { display: grid; place-items: center; margin-bottom: 16px; }
-.crop-stage {
-  position: relative;
-  width: min(100%, 320px);
-  aspect-ratio: 1 / 1;
-  overflow: hidden;
-  border-radius: 12px;
-  background:
-    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%) 0 0 / 16px 16px,
-    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%) 8px 8px / 16px 16px,
-    var(--surface-2);
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-}
-.crop-stage:active { cursor: grabbing; }
-#cropImg {
-  position: absolute;
-  top: 0; left: 0;
-  transform-origin: 0 0;
-  max-width: none;
-  -webkit-user-drag: none;
-}
-.crop-stage.round::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 55%, transparent);
-  pointer-events: none;
-}
-
-.field.slider input[type='range'] { height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
-.field.slider b { color: var(--accent); font-variant-numeric: tabular-nums; }
-
-.crop-grid { display: flex; flex-wrap: wrap; gap: 16px 22px; }
-.crop-grid .lbl { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
-.crop-grid .seg { margin: 0; }
-
-.sep { margin: 18px 0; border: 0; border-top: 1px solid var(--border); }
-.sec-title { display: flex; align-items: center; gap: 7px; margin: 0 0 14px; font-size: 13.5px; }
-.sec-title .ico { color: var(--accent); }
-.row-end { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
-
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 760px) {
   .wrap { padding: 0 14px; }
-  main.wrap { padding-top: 18px; }
+  main.wrap { padding-top: 16px; gap: 14px; }
   .card { padding: 18px 16px; }
   .sub-head { flex-direction: column; }
   .sub-head p { font-size: 13px; }
   .grid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 11px; }
   .toolbar { flex-wrap: wrap; }
   .search { order: 1; flex-basis: 100%; }
-  .brand-text small { display: none; }
   .tile-act { opacity: 1; }
 }
 
