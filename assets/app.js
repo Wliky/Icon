@@ -564,6 +564,7 @@ function renderBulkBar() {
   $('bulkBar').hidden = !(selectMode || n > 0);
   $('bulkCount').textContent = `已选 ${n} 个`;
   $('bulkDownload').disabled = n === 0;
+  $('bulkDelete').disabled = n === 0;
   $('selectBtn').classList.toggle('on', selectMode);
 }
 
@@ -934,6 +935,59 @@ async function saveCrop() {
   }
 }
 
+// ---------- 批量删除 ----------
+function askDeleteSelected() {
+  const list = icons.filter((i) => selected.has(i.file));
+  if (!list.length) return;
+  $('confirmTitle').textContent = '批量删除图标';
+  $('confirmText').textContent =
+    `确定删除选中的 ${list.length} 个图标吗？仓库里的图片文件会一起删除，且无法撤销。`;
+  confirmHandler = () => deleteSelected(list);
+  openModal('confirmModal');
+}
+
+async function deleteSelected(list) {
+  closeModal('confirmModal');
+  showLoading(`删除 1/${list.length}`);
+  const removed = new Set();
+  const failed = [];
+  try {
+    for (let i = 0; i < list.length; i++) {
+      showLoading(`删除 ${i + 1}/${list.length}`);
+      const icon = list[i];
+      try {
+        const f = await getFile(`${config.dir}/${icon.file}`);
+        if (f) await deleteGhFile(`${config.dir}/${icon.file}`, `feat: remove icon ${icon.file}`, f.sha);
+        removed.add(icon.file);
+      } catch {
+        failed.push(icon.name || icon.file);
+      }
+    }
+    // 索引只提交一次：删 N 个图标也只写一遍 icons.json
+    if (removed.size) {
+      await commitIndex(
+        async (l) => l.filter((i) => !removed.has(i.file)),
+        `feat: remove ${removed.size} icon(s)`
+      );
+    }
+    selected.clear();
+    renderAll();
+    if (failed.length) {
+      showToast(
+        `${removed.size ? `✓ 已删除 ${removed.size} 个，` : ''}${failed.length} 个失败`,
+        removed.size ? 'ok' : 'err'
+      );
+    } else {
+      showToast(`✓ 已删除 ${removed.size} 个图标`);
+    }
+  } catch (e) {
+    showToast(ghMessage(e, '删除失败'), 'err');
+    renderAll();
+  } finally {
+    hideLoading();
+  }
+}
+
 // ---------- 删除 / 重命名 ----------
 function askDelete(icon) {
   $('confirmTitle').textContent = '删除图标';
@@ -1171,6 +1225,7 @@ function bindEvents() {
   });
   $('bulkNone').addEventListener('click', () => { selected.clear(); renderAll(); });
   $('bulkDownload').addEventListener('click', downloadSelected);
+  $('bulkDelete').addEventListener('click', askDeleteSelected);
 
   // 网格操作
   $('iconGrid').addEventListener('click', (e) => {
