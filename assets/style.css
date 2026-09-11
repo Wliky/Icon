@@ -306,11 +306,11 @@ code {
   display: flex;
   align-items: center;
 }
-.search svg {
+.search svg.ico {
   position: absolute;
   left: 11px;
   width: 16px; height: 16px;
-  fill: var(--text-faint);
+  stroke: var(--text-faint);
   pointer-events: none;
 }
 .search input {
@@ -584,6 +584,159 @@ code {
   animation: spin .7s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------- 图标 ---------------- */
+.ico {
+  width: 16px; height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.ico.fill { fill: currentColor; stroke: none; }
+.ico.spin { animation: spin .8s linear infinite; transform-origin: center; }
+
+/* 批量选择模式 */
+.grid.picking .tile-check { opacity: 1; }
+.btn.on { background: var(--accent-soft); border-color: var(--accent-line); color: var(--accent); }
+
+/* ---------------- 背景层 ---------------- */
+.bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: none;
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  transition: background-image .3s;
+}
+.bg-dim { position: absolute; inset: 0; background: var(--bg); opacity: 1; transition: opacity .3s; }
+
+/* 有背景图时，卡片稍微提高不透明度以保证可读性 */
+body.has-bg .topbar { background: color-mix(in srgb, var(--bg) 72%, transparent); }
+body.has-bg .card { background: color-mix(in srgb, var(--surface) 92%, transparent); }
+
+/* ---------------- 主题菜单 ---------------- */
+.menu-wrap { position: relative; }
+
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 60;
+  min-width: 152px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  animation: pop .14s ease;
+}
+.menu[hidden] { display: none; }
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 13.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover { background: var(--surface-3); }
+.menu button span { flex: 1; }
+.menu .tick { opacity: 0; color: var(--accent); stroke-width: 2.6; }
+.menu button[aria-checked='true'] .tick { opacity: 1; }
+
+/* ---------------- 批量操作条 ---------------- */
+.bulkbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -2px 0 4px;
+  padding: 9px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 13.5px;
+}
+.bulkbar[hidden] { display: none; }
+.bulkbar .btn { height: 30px; font-size: 13px; }
+
+/* 卡片多选 */
+.tile.pick .tile-check { opacity: 1; }
+.tile-check {
+  position: absolute;
+  top: 8px; left: 8px;
+  z-index: 2;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  border: 1.5px solid var(--border-strong);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: transparent;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .16s, background .16s, border-color .16s;
+}
+.tile:hover .tile-check, .tile.sel .tile-check { opacity: 1; }
+.tile-check .ico { width: 13px; height: 13px; stroke-width: 3; }
+.tile.sel .tile-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+.tile.sel { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+
+/* ---------------- 裁剪编辑器 ---------------- */
+.crop-wrap { display: grid; place-items: center; margin-bottom: 16px; }
+.crop-stage {
+  position: relative;
+  width: min(100%, 320px);
+  aspect-ratio: 1 / 1;
+  overflow: hidden;
+  border-radius: 12px;
+  background:
+    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%) 0 0 / 16px 16px,
+    linear-gradient(45deg, var(--surface-3) 25%, transparent 25%, transparent 75%, var(--surface-3) 75%) 8px 8px / 16px 16px,
+    var(--surface-2);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.crop-stage:active { cursor: grabbing; }
+#cropImg {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+  max-width: none;
+  -webkit-user-drag: none;
+}
+.crop-stage.round::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: 0 0 0 9999px color-mix(in srgb, var(--bg) 55%, transparent);
+  pointer-events: none;
+}
+
+.field.slider input[type='range'] { height: 24px; padding: 0; border: 0; background: transparent; accent-color: var(--accent); }
+.field.slider b { color: var(--accent); font-variant-numeric: tabular-nums; }
+
+.crop-grid { display: flex; flex-wrap: wrap; gap: 16px 22px; }
+.crop-grid .lbl { display: block; margin-bottom: 6px; font-size: 12.5px; font-weight: 600; color: var(--text-dim); }
+.crop-grid .seg { margin: 0; }
+
+.sep { margin: 18px 0; border: 0; border-top: 1px solid var(--border); }
+.sec-title { display: flex; align-items: center; gap: 7px; margin: 0 0 14px; font-size: 13.5px; }
+.sec-title .ico { color: var(--accent); }
+.row-end { display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 10px; }
 
 /* ---------------- 响应式 ---------------- */
 @media (max-width: 760px) {
