@@ -1,6 +1,6 @@
 {
   "name": "Wliky",
-  "description": "共 110 个图标 · 更新于 2026-09-12",
+  "description": "共 111 个图标 · 更新于 2026-09-12",
   "icons": [
     {
       "name": "1",
@@ -9,6 +9,10 @@
     {
       "name": "105°",
       "url": "https://raw.githubusercontent.com/wliky/Icon/main/icons/105.png"
+    },
+    {
+      "name": "1111_gf",
+      "url": "https://raw.githubusercontent.com/wliky/Icon/main/icons/1111-gf.png"
     },
     {
       "name": "1111_gm",
